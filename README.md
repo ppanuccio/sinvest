@@ -81,6 +81,22 @@ flask --app sinvest.app db history
 pytest tests/
 ```
 
+## Architecture (DDD & SOLID)
+
+- Domain: `sinvest/domain` contains pure business logic and entities. This is where pricing, value and gain calculations live.
+- Repositories: `sinvest/repositories` contains repository abstractions and concrete persistence implementations (SQLAlchemy). Controllers use the repository interface.
+- Infrastructure: `sinvest/models` and `sinvest/app.py` handle database models and Flask routes (they are thin controllers).
+
+This separation follows SOLID principles: single responsibility per layer, dependency inversion (controllers depend on repository interfaces), and testable domain logic.
+
+## Running Unit Tests (domain)
+
+Unit tests for domain services are provided under `tests/` and use a `MockPriceProvider` to return deterministic prices.
+
+```bash
+pytest tests/test_domain_services.py -q
+```
+
 ## License
 
 MIT License

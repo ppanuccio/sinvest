@@ -57,45 +57,45 @@
                 </tr>
             </thead>
             <tbody>
-                {% for investment in portfolio.investments %}
+                {% for inv in investments %}
                 <tr>
-                    <td>{{ investment.symbol }}</td>
-                    <td>{{ investment.isin }}</td>
-                    <td>{{ investment.type }}</td>
-                    <td>{{ investment.quantity }}</td>
-                    <td>{{ investment.currency or 'USD' }}</td>
+                    <td>{{ inv.symbol }}</td>
+                    <td>{{ inv.isin }}</td>
+                    <td>{{ inv.type }}</td>
+                    <td>{{ inv.quantity }}</td>
+                    <td>{{ inv.currency or 'USD' }}</td>
                     <td>
-                        {% if investment.currency == 'USD' %}
-                            ${{ "%.2f"|format(investment.purchase_price) }}
-                        {% elif investment.currency == 'EUR' %}
-                            €{{ "%.2f"|format(investment.purchase_price) }}
+                        {% if inv.currency == 'USD' %}
+                            ${{ "%.2f"|format(inv.purchase_price) }}
+                        {% elif inv.currency == 'EUR' %}
+                            €{{ "%.2f"|format(inv.purchase_price) }}
                         {% else %}
-                            {{ investment.currency }} {{ "%.2f"|format(investment.purchase_price) }}
+                            {{ inv.currency }} {{ "%.2f"|format(inv.purchase_price) }}
                         {% endif %}
                     </td>
                     <td>
-                        {% if investment.currency == 'USD' %}
-                            ${{ "%.2f"|format(investment.get_current_value()) }}
-                        {% elif investment.currency == 'EUR' %}
-                            €{{ "%.2f"|format(investment.get_current_value()) }}
+                        {% if inv.currency == 'USD' %}
+                            ${{ "%.2f"|format(inv.current_value) }}
+                        {% elif inv.currency == 'EUR' %}
+                            €{{ "%.2f"|format(inv.current_value) }}
                         {% else %}
-                            {{ investment.currency }} {{ "%.2f"|format(investment.get_current_value()) }}
+                            {{ inv.currency }} {{ "%.2f"|format(inv.current_value) }}
                         {% endif %}
                     </td>
                     <td>
-                        <span class="{% if investment.get_gain_loss() >= 0 %}text-success{% else %}text-danger{% endif %}">
-                            {% if investment.currency == 'USD' %}
-                                ${{ "%.2f"|format(investment.get_gain_loss()) }}
-                            {% elif investment.currency == 'EUR' %}
-                                €{{ "%.2f"|format(investment.get_gain_loss()) }}
+                        <span class="{% if inv.gain_loss >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            {% if inv.currency == 'USD' %}
+                                ${{ "%.2f"|format(inv.gain_loss) }}
+                            {% elif inv.currency == 'EUR' %}
+                                €{{ "%.2f"|format(inv.gain_loss) }}
                             {% else %}
-                                {{ investment.currency }} {{ "%.2f"|format(investment.get_gain_loss()) }}
+                                {{ inv.currency }} {{ "%.2f"|format(inv.gain_loss) }}
                             {% endif %}
                         </span>
                     </td>
                     <td>
-                        <form method="POST" action="{{ url_for('delete_investment', portfolio_id=portfolio.id, investment_id=investment.id) }}" style="display: inline;"
-                              onsubmit="return confirm('Are you sure you want to delete this investment ({{ investment.symbol }})?');">
+                        <form method="POST" action="{{ url_for('delete_investment', portfolio_id=portfolio.id, investment_id=inv.id) }}" style="display: inline;"
+                              onsubmit="return confirm('Are you sure you want to delete this investment ({{ inv.symbol }})?');">
                             <button type="submit" class="btn btn-danger btn-sm">Delete</button>
                         </form>
                     </td>
