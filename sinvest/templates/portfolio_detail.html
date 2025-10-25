@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h2>{{ portfolio.name }}</h2>
+        <p>{{ portfolio.description }}</p>
+    </div>
+    <div class="col text-end">
+        <a href="{{ url_for('add_investment', portfolio_id=portfolio.id) }}" class="btn btn-primary">Add Investment</a>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Portfolio Summary</h5>
+                {% if totals_by_currency %}
+                    {% for curr, amt in totals_by_currency.items() %}
+                        <p class="card-text">Total Value ({{ curr }}):
+                            {% if curr == 'USD' %}${{ "%.2f"|format(amt) }}{% elif curr == 'EUR' %}€{{ "%.2f"|format(amt) }}{% else %}{{ curr }} {{ "%.2f"|format(amt) }}{% endif %}
+                        </p>
+                    {% endfor %}
+                {% else %}
+                    <p class="card-text">No investments yet.</p>
+                {% endif %}
+                {% if gains_by_currency %}
+                    {% for curr, amt in gains_by_currency.items() %}
+                        <p class="card-text">Total Gain/Loss ({{ curr }}):
+                            <span class="{% if amt >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                {% if curr == 'USD' %}${{ "%.2f"|format(amt) }}{% elif curr == 'EUR' %}€{{ "%.2f"|format(amt) }}{% else %}{{ curr }} {{ "%.2f"|format(amt) }}{% endif %}
+                            </span>
+                        </p>
+                    {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col">
+        <h3>Investments</h3>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Symbol</th>
+                    <th>ISIN</th>
+                    <th>Type</th>
+                    <th>Quantity</th>
+                    <th>Currency</th>
+                    <th>Purchase Price</th>
+                    <th>Current Value</th>
+                    <th>Gain/Loss</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for investment in portfolio.investments %}
+                <tr>
+                    <td>{{ investment.symbol }}</td>
+                    <td>{{ investment.isin }}</td>
+                    <td>{{ investment.type }}</td>
+                    <td>{{ investment.quantity }}</td>
+                    <td>{{ investment.currency or 'USD' }}</td>
+                    <td>
+                        {% if investment.currency == 'USD' %}
+                            ${{ "%.2f"|format(investment.purchase_price) }}
+                        {% elif investment.currency == 'EUR' %}
+                            €{{ "%.2f"|format(investment.purchase_price) }}
+                        {% else %}
+                            {{ investment.currency }} {{ "%.2f"|format(investment.purchase_price) }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if investment.currency == 'USD' %}
+                            ${{ "%.2f"|format(investment.get_current_value()) }}
+                        {% elif investment.currency == 'EUR' %}
+                            €{{ "%.2f"|format(investment.get_current_value()) }}
+                        {% else %}
+                            {{ investment.currency }} {{ "%.2f"|format(investment.get_current_value()) }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="{% if investment.get_gain_loss() >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            {% if investment.currency == 'USD' %}
+                                ${{ "%.2f"|format(investment.get_gain_loss()) }}
+                            {% elif investment.currency == 'EUR' %}
+                                €{{ "%.2f"|format(investment.get_gain_loss()) }}
+                            {% else %}
+                                {{ investment.currency }} {{ "%.2f"|format(investment.get_gain_loss()) }}
+                            {% endif %}
+                        </span>
+                    </td>
+                    <td>
+                        <form method="POST" action="{{ url_for('delete_investment', portfolio_id=portfolio.id, investment_id=investment.id) }}" style="display: inline;"
+                              onsubmit="return confirm('Are you sure you want to delete this investment ({{ investment.symbol }})?');">
+                            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

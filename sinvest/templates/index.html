@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h2>Investment Portfolios</h2>
+    </div>
+    <div class="col text-end">
+        <a href="{{ url_for('new_portfolio') }}" class="btn btn-primary">Create New Portfolio</a>
+    </div>
+</div>
+
+<div class="row">
+    {% for portfolio in portfolios %}
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">{{ portfolio.name }}</h5>
+                <p class="card-text">{{ portfolio.description }}</p>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('view_portfolio', portfolio_id=portfolio.id) }}" class="btn btn-info">View Details</a>
+                    <form method="POST" action="{{ url_for('delete_portfolio', portfolio_id=portfolio.id) }}" style="display: inline;"
+                          onsubmit="return confirm('Are you sure you want to delete this portfolio and all its investments?');">
+                        <button type="submit" class="btn btn-danger">Delete</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
