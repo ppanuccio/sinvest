@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>Record Transaction for {{ investment.symbol }} ({{ investment.isin }})</h2>
+  <form method="post">
+    <div class="mb-3">
+      <label for="quantity" class="form-label">Quantity (use negative for sell)</label>
+      <input type="number" step="any" class="form-control" id="quantity" name="quantity" required>
+    </div>
+    <div class="mb-3">
+      <label for="unit_price" class="form-label">Unit Price</label>
+      <input type="number" step="any" class="form-control" id="unit_price" name="unit_price" required>
+    </div>
+    <div class="mb-3">
+      <label for="transaction_date" class="form-label">Date</label>
+      <input type="date" class="form-control" id="transaction_date" name="transaction_date" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Record</button>
+    <a href="{{ url_for('view_portfolio', portfolio_id=investment.portfolio_id) }}" class="btn btn-secondary">Cancel</a>
+  </form>
+</div>
+{% endblock %}

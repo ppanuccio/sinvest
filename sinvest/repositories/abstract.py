@@ -1,7 +1,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import List
-from sinvest.domain.entities import PortfolioEntity, InvestmentEntity
+from sinvest.domain.entities import PortfolioEntity, InvestmentEntity, TransactionEntity
 
 
 class PortfolioRepository(ABC):
@@ -19,6 +19,10 @@ class PortfolioRepository(ABC):
 
     @abstractmethod
     def add_investment(self, investment: InvestmentEntity) -> InvestmentEntity:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def add_transaction(self, portfolio_id: int, isin: str, quantity: float, unit_price: float, transaction_date) -> TransactionEntity:
         raise NotImplementedError()
 
     @abstractmethod

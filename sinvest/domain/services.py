@@ -23,9 +23,17 @@ def compute_investment_values(inv: InvestmentEntity, provider: MarketPriceProvid
     """
     provider = provider or YFinancePriceProvider()
     price = fetch_current_price(inv.symbol, provider) or inv.purchase_price
-    current_value = inv.quantity * price
-    initial_value = inv.quantity * inv.purchase_price
-    gain_loss = current_value - initial_value
+
+    # If the investment has transaction records, compute quantity and cost from them
+    if getattr(inv, 'transactions', None):
+        total_qty = sum((t.quantity or 0.0) for t in inv.transactions)
+        total_cost = sum((t.quantity or 0.0) * (t.unit_price or 0.0) for t in inv.transactions)
+        current_value = total_qty * price
+        gain_loss = current_value - total_cost
+    else:
+        current_value = inv.quantity * price
+        initial_value = inv.quantity * inv.purchase_price
+        gain_loss = current_value - initial_value
     return {
         "current_price": price,
         "current_value": current_value,

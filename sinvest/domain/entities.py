@@ -14,6 +14,7 @@ class InvestmentEntity:
     quantity: float
     purchase_price: float
     purchase_date: datetime
+    transactions: List["TransactionEntity"] | None = None
 
 
 @dataclass
@@ -23,3 +24,14 @@ class PortfolioEntity:
     description: str | None
     created_at: datetime | None
     investments: List[InvestmentEntity]
+
+
+
+@dataclass
+class TransactionEntity:
+    id: int | None
+    investment_id: int
+    quantity: float
+    unit_price: float
+    transaction_date: datetime
+    created_at: datetime | None = None

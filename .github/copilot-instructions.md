@@ -5,9 +5,9 @@
 
 ## Naming Conventions
 - Use Python's PEP 8 style for Python files:
-  - Use snake_case for variables, functions, and methods
-  - Use PascalCase for class names
-  - Use UPPER_SNAKE_CASE for constants
+- Use snake_case for variables, functions, and methods
+- Use PascalCase for class names
+- Use UPPER_SNAKE_CASE for constants
 - Prefix private class members with underscore (_)
 - Use ALL_CAPS for constants
 

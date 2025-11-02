@@ -49,8 +49,10 @@
                     <th>ISIN</th>
                     <th>Type</th>
                     <th>Quantity</th>
+                    <th>Current Qty</th>
                     <th>Currency</th>
                     <th>Purchase Price</th>
+                    <th>Cost Basis</th>
                     <th>Current Value</th>
                     <th>Gain/Loss</th>
                     <th>Actions</th>
@@ -59,10 +61,11 @@
             <tbody>
                 {% for inv in investments %}
                 <tr>
-                    <td>{{ inv.symbol }}</td>
+                    <td><a href="{{ url_for('investment_detail', investment_id=inv.id) }}">{{ inv.symbol }}</a></td>
                     <td>{{ inv.isin }}</td>
                     <td>{{ inv.type }}</td>
                     <td>{{ inv.quantity }}</td>
+                    <td>{{ inv.current_quantity }}</td>
                     <td>{{ inv.currency or 'USD' }}</td>
                     <td>
                         {% if inv.currency == 'USD' %}
@@ -71,6 +74,15 @@
                             €{{ "%.2f"|format(inv.purchase_price) }}
                         {% else %}
                             {{ inv.currency }} {{ "%.2f"|format(inv.purchase_price) }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if inv.currency == 'USD' %}
+                            ${{ "%.2f"|format(inv.cost_basis) }}
+                        {% elif inv.currency == 'EUR' %}
+                            €{{ "%.2f"|format(inv.cost_basis) }}
+                        {% else %}
+                            {{ inv.currency }} {{ "%.2f"|format(inv.cost_basis) }}
                         {% endif %}
                     </td>
                     <td>
@@ -100,6 +112,50 @@
                         </form>
                     </td>
                 </tr>
+                {% if inv.transactions %}
+                <tr class="table-active">
+                    <td colspan="11">
+                        <strong>Transactions</strong>
+                        <table class="table table-sm mt-2 mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Quantity</th>
+                                    <th>Unit Price</th>
+                                    <th>Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for t in inv.transactions %}
+                                <tr>
+                                    <td>{{ t.transaction_date }}</td>
+                                    <td>{{ "%.4f"|format(t.quantity) }}</td>
+                                    <td>
+                                        {% if inv.currency == 'USD' %}
+                                            ${{ "%.2f"|format(t.unit_price) }}
+                                        {% elif inv.currency == 'EUR' %}
+                                            €{{ "%.2f"|format(t.unit_price) }}
+                                        {% else %}
+                                            {{ inv.currency }} {{ "%.2f"|format(t.unit_price) }}
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% set subtotal = (t.quantity or 0) * (t.unit_price or 0) %}
+                                        {% if inv.currency == 'USD' %}
+                                            ${{ "%.2f"|format(subtotal) }}
+                                        {% elif inv.currency == 'EUR' %}
+                                            €{{ "%.2f"|format(subtotal) }}
+                                        {% else %}
+                                            {{ inv.currency }} {{ "%.2f"|format(subtotal) }}
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </td>
+                </tr>
+                {% endif %}
                 {% endfor %}
             </tbody>
         </table>

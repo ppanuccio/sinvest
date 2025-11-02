@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>Investment Details: {{ investment.symbol }} ({{ investment.isin }})</h2>
+  <p>Portfolio: <a href="{{ url_for('view_portfolio', portfolio_id=portfolio.id) }}">{{ portfolio.name }}</a></p>
+  <div class="row mb-3">
+    <div class="col-md-6">
+      <ul class="list-group">
+        <li class="list-group-item"><strong>Type:</strong> {{ investment.type }}</li>
+        <li class="list-group-item"><strong>Currency:</strong> {{ investment.currency }}</li>
+        <li class="list-group-item"><strong>Current Quantity:</strong> {{ current_qty }}</li>
+        <li class="list-group-item"><strong>Cost Basis:</strong> {{ investment.currency }} {{ '%.2f'|format(cost_basis) }}</li>
+        <li class="list-group-item"><strong>Current Price:</strong> {{ investment.currency }} {{ '%.2f'|format(vals.current_price) }}</li>
+        <li class="list-group-item"><strong>Current Value:</strong> {{ investment.currency }} {{ '%.2f'|format(vals.current_value) }}</li>
+        <li class="list-group-item"><strong>Gain/Loss:</strong> <span class="{% if vals.gain_loss >= 0 %}text-success{% else %}text-danger{% endif %}">{{ investment.currency }} {{ '%.2f'|format(vals.gain_loss) }}</span></li>
+      </ul>
+    </div>
+    <div class="col-md-6 text-end">
+      <a href="{{ url_for('add_transaction', portfolio_id=portfolio.id, investment_id=investment.id) }}" class="btn btn-primary">Add Transaction</a>
+    </div>
+  </div>
+
+  <h4>Transactions</h4>
+  {% if transactions %}
+  <table class="table table-sm">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Quantity</th>
+        <th>Unit Price</th>
+        <th>Subtotal</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in transactions %}
+      <tr>
+        <td>{{ t.transaction_date.strftime('%Y-%m-%d') }}</td>
+        <td>{{ '%.4f'|format(t.quantity) }}</td>
+        <td>{{ investment.currency }} {{ '%.2f'|format(t.unit_price) }}</td>
+        <td>{{ investment.currency }} {{ '%.2f'|format((t.quantity or 0) * (t.unit_price or 0)) }}</td>
+        <td>
+          <form method="POST" action="{{ url_for('delete_transaction', investment_id=investment.id, transaction_id=t.id) }}" style="display:inline;" onsubmit="return confirm('Delete this transaction?');">
+            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p>No transactions recorded yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

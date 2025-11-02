@@ -1,8 +1,8 @@
 """SQLAlchemy-based repository implementation mapping persistence models to domain entities."""
 from typing import List
 from sinvest.repositories.abstract import PortfolioRepository
-from sinvest.domain.entities import PortfolioEntity, InvestmentEntity
-from sinvest.models.portfolio import Portfolio as PortfolioModel, Investment as InvestmentModel
+from sinvest.domain.entities import PortfolioEntity, InvestmentEntity, TransactionEntity
+from sinvest.models.portfolio import Portfolio as PortfolioModel, Investment as InvestmentModel, Transaction as TransactionModel
 from sinvest.app import db
 from datetime import datetime
 
@@ -35,7 +35,35 @@ class SQLAlchemyPortfolioRepository(PortfolioRepository):
         )
         db.session.add(im)
         db.session.commit()
+        # If the InvestmentEntity includes an initial transaction list, persist them
+        if getattr(investment, 'transactions', None):
+            for tx in investment.transactions:
+                tm = TransactionModel(
+                    investment_id=im.id,
+                    quantity=tx.quantity,
+                    unit_price=tx.unit_price,
+                    transaction_date=tx.transaction_date,
+                )
+                db.session.add(tm)
+            db.session.commit()
         return self._to_inv_entity(im)
+
+    def add_transaction(self, portfolio_id: int, isin: str, quantity: float, unit_price: float, transaction_date) -> TransactionEntity:
+        # Find the investment by portfolio_id + isin (should be unique)
+        im = db.session.execute(
+            db.select(InvestmentModel).where(InvestmentModel.portfolio_id == portfolio_id, InvestmentModel.isin == isin)
+        ).scalars().first()
+        if not im:
+            raise ValueError("Investment not found for portfolio and ISIN")
+        tm = TransactionModel(
+            investment_id=im.id,
+            quantity=quantity,
+            unit_price=unit_price,
+            transaction_date=transaction_date,
+        )
+        db.session.add(tm)
+        db.session.commit()
+        return TransactionEntity(id=tm.id, investment_id=tm.investment_id, quantity=tm.quantity, unit_price=tm.unit_price, transaction_date=tm.transaction_date, created_at=tm.created_at)
 
     def delete_investment(self, investment_id: int) -> None:
         im = db.session.get(InvestmentModel, investment_id)
@@ -54,6 +82,11 @@ class SQLAlchemyPortfolioRepository(PortfolioRepository):
         return PortfolioEntity(id=m.id, name=m.name, description=m.description, created_at=m.created_at, investments=invs)
 
     def _to_inv_entity(self, im: InvestmentModel) -> InvestmentEntity:
+        # Map transactions if present
+        txs = []
+        for t in (getattr(im, 'transactions', []) or []):
+            txs.append(TransactionEntity(id=t.id, investment_id=t.investment_id, quantity=t.quantity, unit_price=t.unit_price, transaction_date=t.transaction_date, created_at=t.created_at))
+
         return InvestmentEntity(
             id=im.id,
             portfolio_id=im.portfolio_id,
@@ -64,4 +97,5 @@ class SQLAlchemyPortfolioRepository(PortfolioRepository):
             quantity=im.quantity,
             purchase_price=im.purchase_price,
             purchase_date=im.purchase_date,
+            transactions=txs,
         )

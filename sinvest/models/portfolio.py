@@ -2,6 +2,7 @@
 from datetime import datetime
 import yfinance as yf
 from sinvest.app import db
+from sqlalchemy.orm import relationship
 
 class Portfolio(db.Model):
     """Portfolio model representing an investment portfolio"""
@@ -47,6 +48,8 @@ class Investment(db.Model):
     purchase_price = db.Column(db.Float, nullable=False)
     purchase_date = db.Column(db.DateTime, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # transactions record buys (+) and sells (-) for this investment
+    transactions = db.relationship('Transaction', backref='investment', lazy=True, cascade='all, delete-orphan')
     # Ensure the same ISIN cannot be added multiple times to the same portfolio.
     # (We keep this at the model level; applying it to an existing SQLite DB
     # requires a migration. We also add a runtime check when creating records.)
@@ -67,10 +70,28 @@ class Investment(db.Model):
         are expressed in the same currency as `self.currency`.
         """
         price = self.get_current_price() or 0.0
+        # If there are transaction records, compute current quantity as the sum of transactions.
+        if getattr(self, 'transactions', None):
+            total_qty = sum((t.quantity or 0.0) for t in self.transactions)
+            return total_qty * price
         return self.quantity * price
 
     def get_gain_loss(self):
         """Calculate total gain/loss for the investment in the investment's currency."""
         current_value = self.get_current_value() or 0.0
+        # If there are transaction records, initial value is sum(q * unit_price)
+        if getattr(self, 'transactions', None):
+            total_cost = sum(((t.quantity or 0.0) * (t.unit_price or 0.0)) for t in self.transactions)
+            return current_value - total_cost
         initial_value = (self.quantity or 0.0) * (self.purchase_price or 0.0)
         return current_value - initial_value
+
+
+class Transaction(db.Model):
+    """Records a buy (+quantity) or sell (-quantity) for an Investment at a given unit price."""
+    id = db.Column(db.Integer, primary_key=True)
+    investment_id = db.Column(db.Integer, db.ForeignKey('investment.id'), nullable=False)
+    quantity = db.Column(db.Float, nullable=False)
+    unit_price = db.Column(db.Float, nullable=False)
+    transaction_date = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
