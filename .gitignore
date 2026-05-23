@@ -61,3 +61,8 @@ coverage.xml
 dmypy.json
 node_modules/
 .env.production.local
+data/users.json
+data/transactions.json
+data/price_history.json
+data/portfolios.json
+data/investments.json
