@@ -3,7 +3,9 @@ from decimal import Decimal
 from typing import List
 
 from fastapi import FastAPI, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from pydantic import BaseModel, EmailStr, Field
 
 from app.application.dto.investment_dto import CreateInvestmentDTO
@@ -28,6 +30,16 @@ from app.infrastructure.file_based_repositories import (
 )
 
 app = FastAPI(title="sinvest HTTP API", version="0.1.0")
+
+# Mount the simple static UI at /ui if available
+_ui_path = Path(__file__).resolve().parent / "ui"
+if _ui_path.exists():
+    app.mount("/ui", StaticFiles(directory=str(_ui_path), html=True), name="ui")
+
+
+@app.get("/")
+async def _root_redirect():
+    return RedirectResponse(url="/ui/")
 
 # Instantiate persistent repositories for HTTP-backed interaction.
 user_repository = FileBasedUserRepository()

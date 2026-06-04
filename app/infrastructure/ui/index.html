@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>sinvest — UI</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;max-width:900px;margin:20px auto;padding:0 12px}
+    h1{font-size:1.2rem}
+    .card{border:1px solid #ddd;padding:12px;margin:10px 0;border-radius:6px}
+    label{display:block;margin-top:6px}
+    input,select,button{padding:6px;margin-top:4px}
+    pre{background:#f6f6f6;padding:8px;border-radius:4px;overflow:auto}
+  </style>
+</head>
+<body>
+  <h1>sinvest — Minimal UI</h1>
+
+  <div class="card">
+    <strong>Create User</strong>
+    <label>Username <input id="user-username" /></label>
+    <label>Email <input id="user-email" /></label>
+    <label>Password <input id="user-password" type="password" /></label>
+    <button id="btn-create-user">Create User</button>
+    <pre id="out-create-user"></pre>
+  </div>
+
+  <div class="card">
+    <strong>Create Portfolio</strong>
+    <label>User ID <input id="portfolio-user-id" /></label>
+    <label>Name <input id="portfolio-name" /></label>
+    <label>Description <input id="portfolio-description" /></label>
+    <button id="btn-create-portfolio">Create Portfolio</button>
+    <pre id="out-create-portfolio"></pre>
+  </div>
+
+  <div class="card">
+    <strong>List Portfolios</strong>
+    <label>User ID <input id="list-portfolios-user-id" /></label>
+    <button id="btn-list-portfolios">List</button>
+    <pre id="out-list-portfolios"></pre>
+  </div>
+
+  <div class="card">
+    <strong>Create Investment</strong>
+    <label>User ID <input id="inv-user-id" /></label>
+    <label>Portfolio ID <input id="inv-portfolio-id" /></label>
+    <label>Identifier <input id="inv-identifier" /></label>
+    <label>Identifier Type <select id="inv-identifier-type"><option>ISIN</option><option selected>TICKER</option></select></label>
+    <label>Type <select id="inv-type"><option>stock</option><option>bond</option><option>etf</option><option>crypto</option><option>mutual_fund</option><option>commodity</option><option>other</option></select></label>
+    <button id="btn-create-investment">Create Investment</button>
+    <pre id="out-create-investment"></pre>
+  </div>
+
+  <div class="card">
+    <strong>Create Transaction</strong>
+    <label>User ID <input id="tx-user-id" /></label>
+    <label>Investment ID <input id="tx-investment-id" /></label>
+    <label>Amount <input id="tx-amount" /></label>
+    <label>Quantity <input id="tx-quantity" /></label>
+    <label>Broker <input id="tx-broker" /></label>
+    <label>Date (ISO) <input id="tx-date" value="2024-01-01T10:00:00" /></label>
+    <button id="btn-create-transaction">Create Transaction</button>
+    <pre id="out-create-transaction"></pre>
+  </div>
+
+  <div class="card">
+    <strong>List Investments</strong>
+    <label>User ID <input id="list-inv-user-id" /></label>
+    <label>Portfolio ID <input id="list-inv-portfolio-id" /></label>
+    <button id="btn-list-investments">List</button>
+    <pre id="out-list-investments"></pre>
+  </div>
+
+  <div class="card">
+    <strong>List Transactions</strong>
+    <label>User ID <input id="list-tx-user-id" /></label>
+    <label>Investment ID <input id="list-tx-investment-id" /></label>
+    <button id="btn-list-transactions">List</button>
+    <pre id="out-list-transactions"></pre>
+  </div>
+
+  <script src="/ui/app.js"></script>
+</body>
+</html>
