@@ -16,6 +16,9 @@ from app.application.use_cases.investment_use_cases import InvestmentUseCases
 from app.application.use_cases.portfolio_use_cases import PortfolioUseCases
 from app.application.use_cases.transaction_use_cases import TransactionUseCases
 from app.application.use_cases.user_use_cases import UserUseCases
+from app.application.use_cases.portfolio_analytics_use_cases import (
+    PortfolioAnalyticsUseCases,
+)
 from app.domain.exceptions import (
     DuplicateUserException,
     DomainException,
@@ -28,6 +31,13 @@ from app.infrastructure.file_based_repositories import (
     FileBasedTransactionRepository,
     FileBasedUserRepository,
 )
+
+from app.infrastructure.file_based_repositories import (
+    FileBasedPriceHistoryRepository,
+)
+from dataclasses import asdict
+from datetime import datetime
+from decimal import Decimal
 
 app = FastAPI(title="sinvest HTTP API", version="0.1.0")
 
@@ -46,6 +56,7 @@ user_repository = FileBasedUserRepository()
 portfolio_repository = FileBasedPortfolioRepository()
 investment_repository = FileBasedInvestmentRepository()
 transaction_repository = FileBasedTransactionRepository()
+price_history_repository = FileBasedPriceHistoryRepository()
 
 user_use_cases = UserUseCases(user_repository)
 portfolio_use_cases = PortfolioUseCases(portfolio_repository)
@@ -54,6 +65,13 @@ investment_use_cases = InvestmentUseCases(
 )
 transaction_use_cases = TransactionUseCases(
     transaction_repository, investment_repository, portfolio_repository
+)
+
+portfolio_analytics_use_cases = PortfolioAnalyticsUseCases(
+    portfolio_repository,
+    investment_repository,
+    transaction_repository,
+    price_history_repository,
 )
 
 
@@ -149,6 +167,29 @@ async def domain_exception_handler(request, exc: DomainException):
 @app.get("/health")
 async def health_check() -> dict:
     return {"status": "ok"}
+
+
+def _encode_value(v):
+    if isinstance(v, Decimal):
+        return str(v)
+    if isinstance(v, datetime):
+        return v.isoformat()
+    if isinstance(v, dict):
+        return {k: _encode_value(val) for k, val in v.items()}
+    if isinstance(v, list):
+        return [_encode_value(i) for i in v]
+    return v
+
+
+@app.get(
+    "/users/{user_id}/portfolios/{portfolio_id}/analytics",
+)
+async def get_portfolio_analytics(user_id: str, portfolio_id: str):
+    analytics = portfolio_analytics_use_cases.get_portfolio_analytics(
+        portfolio_id, user_id
+    )
+    payload = asdict(analytics)
+    return JSONResponse(content=_encode_value(payload))
 
 
 @app.post("/users", response_model=UserResponseModel, status_code=status.HTTP_201_CREATED)
