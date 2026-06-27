@@ -3,86 +3,348 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>sinvest — UI</title>
+  <title>sinvest — Portfolio Dashboard</title>
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;max-width:1200px;margin:20px auto;padding:0 12px}
-    h1{font-size:1.2rem}
-    .card{border:1px solid #ddd;padding:12px;margin:10px 0;border-radius:6px}
-    label{display:block;margin-top:6px}
-    input,select,button{padding:6px;margin-top:4px}
-    pre{background:#f6f6f6;padding:8px;border-radius:4px;overflow:auto}
-    .row{display:flex;gap:16px}
-    .col{flex:1}
-    .col.small{flex:0 0 360px}
-    .summary{display:flex;gap:12px;flex-wrap:wrap}
-    .summary .item{background:#fff;border:1px solid #eee;padding:8px;border-radius:6px}
+    :root {
+      color-scheme: light;
+      color: #172033;
+      background: #eef3f8;
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --bg: #eef3f8;
+      --surface: #ffffff;
+      --surface-muted: #f6f8fb;
+      --border: #d8e1ea;
+      --border-strong: #c7d3df;
+      --text: #172033;
+      --muted: #637083;
+      --primary: #126a6f;
+      --primary-strong: #0b555b;
+      --primary-soft: #e5f3f1;
+      --accent: #ad6b18;
+      --danger: #b42318;
+      --success: #16784f;
+      --shadow: 0 18px 45px rgba(20, 33, 61, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(238, 243, 248, 0.95) 280px),
+        var(--bg);
+    }
+    .page { display: grid; gap: 18px; max-width: 1480px; margin: 0 auto; padding: 24px; }
+    .topbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-end;
+      padding: 8px 2px 2px;
+    }
+    .topbar h1 { margin: 0; font-size: clamp(1.7rem, 3vw, 2.45rem); line-height: 1.05; letter-spacing: 0; }
+    .topbar p { margin: 8px 0 0; color: var(--muted); max-width: 760px; line-height: 1.55; }
+    .dashboard { display: grid; grid-template-columns: minmax(320px, 390px) minmax(0, 1fr); gap: 18px; align-items: start; }
+    .panel {
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 20px;
+    }
+    .controls-panel { position: sticky; top: 16px; display: grid; gap: 18px; }
+    .panel h2 { margin: 0; font-size: 1rem; color: var(--text); }
+    .section-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .stack { display: grid; gap: 12px; }
+    .split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .button-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; }
+    .card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+    .metric-card {
+      min-height: 116px;
+      background: var(--surface-muted);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .metric-card span {
+      display: block;
+      margin-top: 14px;
+      font-size: clamp(1.2rem, 2.4vw, 1.85rem);
+      line-height: 1.1;
+      font-weight: 750;
+      overflow-wrap: anywhere;
+    }
+    .form-group { display: grid; gap: 9px; margin-bottom: 0; }
+    label { font-size: 0.83rem; font-weight: 650; color: var(--muted); }
+    input, select, button, textarea {
+      width: 100%;
+      min-height: 42px;
+      border-radius: 8px;
+      border: 1px solid var(--border-strong);
+      padding: 10px 12px;
+      font: inherit;
+      color: var(--text);
+      background: #fff;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(18, 106, 111, 0.14);
+      outline: none;
+    }
+    button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: var(--primary);
+      color: #ffffff;
+      border: none;
+      cursor: pointer;
+      font-weight: 700;
+      transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+      white-space: nowrap;
+    }
+    button:hover { background: var(--primary-strong); transform: translateY(-1px); box-shadow: 0 8px 18px rgba(18, 106, 111, 0.18); }
+    button:active { transform: translateY(0); }
+    .small-button { width: auto; background: #fff; color: var(--text); border: 1px solid var(--border-strong); }
+    .small-button:hover { background: var(--surface-muted); box-shadow: none; }
+    .divider { height: 1px; margin: 2px 0; background: var(--border); }
+    pre {
+      display: none;
+      max-height: 180px;
+      overflow: auto;
+      margin: 2px 0 0;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #101828;
+      color: #e6edf7;
+      padding: 12px;
+      white-space: pre-wrap;
+      font-size: 0.78rem;
+    }
+    pre:not(:empty) { display: block; }
+    .overview-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .portfolio-meta {
+      min-height: 66px;
+      display: grid;
+      gap: 4px;
+      align-content: center;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface-muted);
+      color: var(--muted);
+    }
+    .table-wrapper { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+    table { width: 100%; min-width: 860px; border-collapse: collapse; background: #fff; }
+    th, td { text-align: left; padding: 13px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    th { color: var(--muted); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.04em; background: var(--surface-muted); }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover { background: #f7fbfb; }
+    tbody tr:last-child td { border-bottom: none; }
+    .empty-row { color: var(--muted); text-align: center; padding: 30px 12px; }
+    .positive { color: var(--success); }
+    .negative { color: var(--danger); }
+    .tag {
+      display: inline-flex;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      background: var(--primary-soft);
+      color: var(--primary-strong);
+    }
+    .composition-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+    .composition-item {
+      display: grid;
+      grid-template-columns: minmax(150px, 220px) 1fr;
+      align-items: center;
+      gap: 14px;
+      background: var(--surface-muted);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 13px 14px;
+    }
+    .bar { height: 10px; border-radius: 999px; background: #dfe7ee; position: relative; overflow: hidden; }
+    .bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); }
+    .hint { color: var(--muted); font-size: 0.88rem; }
+    .footer-note { color: var(--muted); font-size: 0.86rem; margin-top: 10px; }
+    .status-message {
+      padding: 12px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--primary-soft);
+      color: var(--primary-strong);
+      font-weight: 650;
+    }
+    .transactions-output {
+      display: block;
+      min-height: 132px;
+      background: var(--surface-muted);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    @media (max-width: 1020px) {
+      .dashboard { grid-template-columns: 1fr; }
+      .controls-panel { position: static; }
+    }
+    @media (max-width: 720px) {
+      .page { padding: 16px; }
+      .panel { padding: 16px; }
+      .card-grid, .split, .button-row { grid-template-columns: 1fr; }
+      .small-button { width: 100%; }
+      .composition-item { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
-  <h1>sinvest — Minimal UI</h1>
-  <div class="row">
-    <div class="col small">
-      <div class="card">
-        <strong>Account</strong>
-        <label>Username <input id="user-username" /></label>
-        <label>Email <input id="user-email" /></label>
-        <label>Password <input id="user-password" type="password" /></label>
-        <button id="btn-create-user">Create User</button>
-        <pre id="out-create-user"></pre>
+  <div class="page">
+    <div class="topbar">
+      <div>
+        <h1>sinvest Portfolio Dashboard</h1>
+        <p>See portfolio composition at a glance, inspect your current holdings by asset type, and understand which positions are gaining or losing value.</p>
       </div>
-
-      <div class="card">
-        <strong>Portfolios</strong>
-        <label>User ID <input id="portfolio-user-id" /></label>
-        <button id="btn-list-portfolios">Load Portfolios</button>
-        <select id="portfolio-select" style="width:100%;margin-top:8px"></select>
-        <button id="btn-create-portfolio">Create Portfolio</button>
-        <label>Name <input id="portfolio-name" /></label>
-        <label>Description <input id="portfolio-description" /></label>
-        <pre id="out-create-portfolio"></pre>
-      </div>
-
-      <div class="card">
-        <strong>Analytics Summary</strong>
-        <div id="analytics-summary" class="summary"></div>
+      <div>
+        <button id="btn-refresh" class="small-button">Refresh data</button>
       </div>
     </div>
 
-    <div class="col">
-      <div class="card">
-        <strong>Investments</strong>
-        <div><button id="btn-list-investments">Refresh Investments</button></div>
-        <ul id="out-list-investments"></ul>
+    <div id="status-message" class="status-message">Enter a user ID and load portfolios to begin.</div>
+
+    <div class="dashboard">
+      <div class="panel controls-panel">
+        <div class="section-heading"><h2>Account</h2></div>
+        <div class="stack">
+          <div class="form-group">
+            <label for="user-username">Username</label>
+            <input id="user-username" placeholder="Create a new user" />
+          </div>
+          <div class="form-group">
+            <label for="user-email">Email</label>
+            <input id="user-email" placeholder="user@example.com" />
+          </div>
+          <div class="form-group">
+            <label for="user-password">Password</label>
+            <input id="user-password" type="password" placeholder="Minimum 6 characters" />
+            <button id="btn-create-user">Create User</button>
+            <pre id="out-create-user"></pre>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="section-heading"><h2>Portfolio Controls</h2></div>
+        <div class="stack">
+          <div class="form-group">
+            <label for="portfolio-user-id">User ID</label>
+            <input id="portfolio-user-id" placeholder="e.g. 98ba..." />
+          </div>
+          <div class="button-row">
+            <button id="btn-list-portfolios">Load Portfolios</button>
+            <button id="btn-refresh-portfolio" class="small-button">Reload</button>
+          </div>
+          <div class="form-group">
+            <label for="portfolio-select">Select Portfolio</label>
+            <select id="portfolio-select"></select>
+          </div>
+          <div class="form-group">
+            <label for="portfolio-name">Create Portfolio</label>
+            <input id="portfolio-name" placeholder="Portfolio name" />
+            <input id="portfolio-description" placeholder="Description" />
+            <button id="btn-create-portfolio">Create Portfolio</button>
+            <pre id="out-create-portfolio"></pre>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="section-heading"><h2>Quick Actions</h2></div>
+        <div class="stack">
+          <div class="form-group">
+            <label for="inv-identifier">New Investment</label>
+            <input id="inv-identifier" placeholder="Ticker or ISIN" />
+            <div class="split">
+              <select id="inv-identifier-type"><option>ISIN</option><option selected>TICKER</option></select>
+              <select id="inv-type"><option>stock</option><option>bond</option><option>etf</option><option>crypto</option><option>mutual_fund</option><option>commodity</option><option>other</option></select>
+            </div>
+            <button id="btn-create-investment">Add investment</button>
+            <pre id="out-create-investment"></pre>
+          </div>
+          <div class="form-group">
+            <label for="tx-investment-id">Transaction for Investment</label>
+            <input id="tx-investment-id" placeholder="Investment ID" />
+            <div class="split">
+              <input id="tx-amount" placeholder="Amount (USD)" />
+              <input id="tx-quantity" placeholder="Quantity" />
+            </div>
+            <input id="tx-broker" placeholder="Broker" />
+            <input id="tx-date" placeholder="2024-01-01T10:00:00" />
+            <button id="btn-create-transaction">Add transaction</button>
+            <pre id="out-create-transaction"></pre>
+          </div>
+        </div>
       </div>
 
-      <div class="card">
-        <strong>Create Investment</strong>
-        <label>Identifier <input id="inv-identifier" /></label>
-        <label>Identifier Type <select id="inv-identifier-type"><option>ISIN</option><option selected>TICKER</option></select></label>
-        <label>Type <select id="inv-type"><option>stock</option><option>bond</option><option>etf</option><option>crypto</option><option>mutual_fund</option><option>commodity</option><option>other</option></select></label>
-        <button id="btn-create-investment">Create Investment</button>
-        <pre id="out-create-investment"></pre>
-      </div>
-
-      <div class="card">
-        <strong>Create Transaction</strong>
-        <label>Investment ID <input id="tx-investment-id" /></label>
-        <label>Amount <input id="tx-amount" /></label>
-        <label>Quantity <input id="tx-quantity" /></label>
-        <label>Broker <input id="tx-broker" /></label>
-        <label>Date (ISO) <input id="tx-date" value="2024-01-01T10:00:00" /></label>
-        <button id="btn-create-transaction">Create Transaction</button>
-        <pre id="out-create-transaction"></pre>
-      </div>
-
-      <div class="card">
-        <strong>Transactions</strong>
-        <div><button id="btn-list-transactions">Refresh Transactions</button></div>
-        <pre id="out-list-transactions"></pre>
+      <div class="panel">
+        <div class="overview-header">
+          <div>
+            <h2>Portfolio Overview</h2>
+            <div class="hint">Live snapshot of value, allocation, holdings, and transaction history.</div>
+          </div>
+          <div id="portfolio-meta" class="portfolio-meta">No portfolio selected.</div>
+        </div>
+        <div class="card-grid">
+          <div class="metric-card">
+            <label>Total Value</label>
+            <span id="summary-value">–</span>
+          </div>
+          <div class="metric-card">
+            <label>Invested</label>
+            <span id="summary-invested">–</span>
+          </div>
+          <div class="metric-card">
+            <label>Gain / Loss</label>
+            <span id="summary-yield" class="positive">–</span>
+          </div>
+        </div>
+        <div class="section-heading"><h2>Asset Mix</h2></div>
+        <ul id="composition-list" class="composition-list"></ul>
+        <div class="section-heading" style="margin-top:22px;"><h2>Holdings</h2></div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Asset</th>
+                <th>Type</th>
+                <th>Qty</th>
+                <th>Current Price</th>
+                <th>Invested</th>
+                <th>Value</th>
+                <th>Gain</th>
+                <th>Allocation</th>
+              </tr>
+            </thead>
+            <tbody id="investments-table"></tbody>
+          </table>
+        </div>
+        <ul id="out-list-investments" style="display:none;"></ul>
+        <div class="footer-note">Click an investment row to prefill transaction creation and inspect transactions below.</div>
+        <div class="section-heading" style="margin-top:22px;"><h2>Transactions</h2></div>
+        <pre id="out-list-transactions" class="transactions-output">Select an investment to view transaction history.</pre>
       </div>
     </div>
   </div>
-
   <script src="/ui/app.js"></script>
 </body>
 </html>
