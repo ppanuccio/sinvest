@@ -6,11 +6,13 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.domain.entities.auth import UserCredential
 from app.domain.entities.investment import Investment
 from app.domain.entities.portfolio import Portfolio
 from app.domain.entities.price_history import PriceHistory
 from app.domain.entities.transaction import Transaction
 from app.domain.entities.user import User
+from app.domain.repositories.credential_repository import CredentialRepository
 from app.domain.repositories.investment_repository import InvestmentRepository
 from app.domain.repositories.portfolio_repository import PortfolioRepository
 from app.domain.repositories.price_history_repository import (
@@ -157,6 +159,71 @@ class FileBasedUserRepository(UserRepository):
 
     def update(self, user: User) -> User:
         return self.save(user)
+
+
+class FileBasedCredentialRepository(CredentialRepository):
+    """File-based implementation of CredentialRepository."""
+
+    def __init__(self, file_path: str = "data/credentials.json"):
+        self.file_path = Path(file_path)
+        self.file_path.parent.mkdir(parents=True, exist_ok=True)
+        if not self.file_path.exists():
+            self.file_path.write_text("[]")
+
+    def _load(self) -> Dict[str, dict]:
+        with open(self.file_path, "r") as f:
+            credentials = json.load(f)
+        return {credential["user_id"]: credential for credential in credentials}
+
+    def _save(self, credentials: Dict[str, dict]) -> None:
+        with open(self.file_path, "w") as f:
+            json.dump(
+                list(credentials.values()),
+                f,
+                cls=JSONEncoder,
+                indent=2,
+            )
+
+    def save(self, credential: UserCredential) -> UserCredential:
+        credentials = self._load()
+        credentials[credential.user_id] = {
+            "user_id": credential.user_id,
+            "username": credential.username,
+            "password_hash": credential.password_hash,
+            "created_at": credential.created_at,
+            "updated_at": credential.updated_at,
+        }
+        self._save(credentials)
+        return credential
+
+    def get_by_username(self, username: str) -> Optional[UserCredential]:
+        credentials = self._load()
+        for credential in credentials.values():
+            if credential["username"] == username:
+                return self._to_entity(credential)
+        return None
+
+    def get_by_user_id(self, user_id: str) -> Optional[UserCredential]:
+        credentials = self._load()
+        credential = credentials.get(user_id)
+        return self._to_entity(credential) if credential else None
+
+    def delete_by_user_id(self, user_id: str) -> bool:
+        credentials = self._load()
+        if user_id not in credentials:
+            return False
+        del credentials[user_id]
+        self._save(credentials)
+        return True
+
+    def _to_entity(self, credential: dict) -> UserCredential:
+        return UserCredential(
+            user_id=credential["user_id"],
+            username=credential["username"],
+            password_hash=credential["password_hash"],
+            created_at=_decode_value(credential["created_at"]),
+            updated_at=_decode_value(credential.get("updated_at")),
+        )
 
 
 class FileBasedPortfolioRepository(PortfolioRepository):

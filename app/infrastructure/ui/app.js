@@ -1,4 +1,5 @@
 const json = (res) => res.json().catch(() => ({}));
+const AUTH_STORAGE_KEY = 'sinvest.auth';
 
 const state = {
   userId: '',
@@ -7,6 +8,8 @@ const state = {
   analytics: null,
   investments: [],
   portfolio: null,
+  authToken: '',
+  authUsername: '',
 };
 
 function setStatus(message, isError = false) {
@@ -39,9 +42,66 @@ function formatPercent(value) {
 
 async function request(method, path, body = null) {
   const options = { method, headers: { 'Content-Type': 'application/json' } };
+  if (state.authToken) {
+    options.headers.Authorization = `Bearer ${state.authToken}`;
+  }
   if (body) options.body = JSON.stringify(body);
   const res = await fetch(path, options);
   return { status: res.status, data: await json(res) };
+}
+
+function saveAuth(tokenData) {
+  state.authToken = tokenData.access_token;
+  state.authUsername = tokenData.username;
+  state.userId = tokenData.user_id;
+  localStorage.setItem(
+    AUTH_STORAGE_KEY,
+    JSON.stringify({
+      access_token: tokenData.access_token,
+      username: tokenData.username,
+      user_id: tokenData.user_id,
+    }),
+  );
+  document.getElementById('portfolio-user-id').value = tokenData.user_id;
+  renderAuthState();
+}
+
+function restoreAuth() {
+  const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+  if (!raw) return;
+  try {
+    const tokenData = JSON.parse(raw);
+    if (tokenData.access_token && tokenData.user_id) {
+      saveAuth(tokenData);
+    }
+  } catch (error) {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+  }
+}
+
+function clearAuth() {
+  state.authToken = '';
+  state.authUsername = '';
+  state.userId = '';
+  state.portfolioId = '';
+  state.analytics = null;
+  state.portfolio = null;
+  state.investments = [];
+  localStorage.removeItem(AUTH_STORAGE_KEY);
+  document.getElementById('portfolio-user-id').value = '';
+  renderAuthState();
+  renderPortfolioMeta();
+  renderOverview();
+  renderComposition();
+  renderInvestments();
+  setStatus('Logged out.');
+}
+
+function renderAuthState() {
+  const authState = document.getElementById('auth-state');
+  authState.textContent = state.authToken
+    ? `Authenticated as ${state.authUsername}.`
+    : 'Not authenticated.';
 }
 
 async function loadPortfolios(userId) {
@@ -176,13 +236,33 @@ async function createUser() {
   const res = await request('POST', '/users', { username, email, password });
   document.getElementById('out-create-user').textContent = JSON.stringify(res, null, 2);
   if (res.status === 201 || res.status === 200) {
-    setStatus('User created. Paste the returned ID into the User ID field to continue.');
+    setStatus('User created. Signing in.');
     const userId = res.data.id || '';
     if (userId) {
       document.getElementById('portfolio-user-id').value = userId;
     }
+    document.getElementById('login-username').value = username;
+    document.getElementById('login-password').value = password;
+    await login();
   } else {
     setStatus(res.data.detail || 'Failed to create user.', true);
+  }
+}
+
+async function login() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value.trim();
+  if (!username || !password) {
+    setStatus('Username and password are required to login.', true);
+    return;
+  }
+
+  const res = await request('POST', '/auth/login', { username, password });
+  if (res.status === 200) {
+    saveAuth(res.data);
+    setStatus('Login successful. Load portfolios to continue.');
+  } else {
+    setStatus(res.data.detail || 'Login failed.', true);
   }
 }
 
@@ -375,6 +455,8 @@ function initializeEventListeners() {
   document.getElementById('btn-list-portfolios').addEventListener('click', refreshPortfolios);
   document.getElementById('btn-refresh-portfolio').addEventListener('click', refreshPortfolios);
   document.getElementById('btn-create-user').addEventListener('click', createUser);
+  document.getElementById('btn-login').addEventListener('click', login);
+  document.getElementById('btn-logout').addEventListener('click', clearAuth);
   document.getElementById('btn-create-portfolio').addEventListener('click', createPortfolio);
   document.getElementById('btn-create-investment').addEventListener('click', createInvestment);
   document.getElementById('btn-create-transaction').addEventListener('click', createTransaction);
@@ -394,6 +476,7 @@ function initializeEventListeners() {
 
 window.addEventListener('load', () => {
   initializeEventListeners();
+  restoreAuth();
   renderPortfolioMeta();
   renderOverview();
   renderComposition();

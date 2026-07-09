@@ -5,17 +5,23 @@ from app.application.use_cases.investment_use_cases import InvestmentUseCases
 from app.application.use_cases.portfolio_use_cases import PortfolioUseCases
 from app.application.use_cases.transaction_use_cases import TransactionUseCases
 from app.application.use_cases.user_use_cases import UserUseCases
+from app.application.use_cases.authentication_use_cases import AuthenticationUseCases
 from app.infrastructure import http_api
 from app.infrastructure.file_based_repositories import (
+    FileBasedCredentialRepository,
     FileBasedInvestmentRepository,
     FileBasedPortfolioRepository,
     FileBasedTransactionRepository,
     FileBasedUserRepository,
 )
+from app.infrastructure.security import HMACTokenService, PBKDF2PasswordHasher
 
 
 def _create_test_client(tmp_path) -> TestClient:
     user_repo = FileBasedUserRepository(str(tmp_path / "users.json"))
+    credential_repo = FileBasedCredentialRepository(
+        str(tmp_path / "credentials.json")
+    )
     portfolio_repo = FileBasedPortfolioRepository(
         str(tmp_path / "portfolios.json")
     )
@@ -27,11 +33,21 @@ def _create_test_client(tmp_path) -> TestClient:
     )
 
     http_api.user_repository = user_repo
+    http_api.credential_repository = credential_repo
     http_api.portfolio_repository = portfolio_repo
     http_api.investment_repository = investment_repo
     http_api.transaction_repository = transaction_repo
 
     http_api.user_use_cases = UserUseCases(user_repo)
+    http_api.password_hasher = PBKDF2PasswordHasher(iterations=1_000)
+    http_api.token_service = HMACTokenService(secret="test-secret")
+    http_api.authentication_use_cases = AuthenticationUseCases(
+        http_api.user_use_cases,
+        user_repo,
+        credential_repo,
+        http_api.password_hasher,
+        http_api.token_service,
+    )
     http_api.portfolio_use_cases = PortfolioUseCases(portfolio_repo)
     http_api.investment_use_cases = InvestmentUseCases(
         investment_repo, portfolio_repo
@@ -61,10 +77,43 @@ def test_http_api_end_to_end_flow(tmp_path):
     assert user_data["email"] == "john@example.com"
     user_id = user_data["id"]
 
+    # Protected routes require a bearer token
+    response = client.get(f"/users/{user_id}/portfolios")
+    assert response.status_code == 401
+
+    # Login and use the issued bearer token
+    response = client.post(
+        "/auth/login",
+        json={"username": "john", "password": "securepass"},
+    )
+    assert response.status_code == 200
+    token_data = response.json()
+    assert token_data["token_type"] == "bearer"
+    assert token_data["user_id"] == user_id
+    headers = {"Authorization": f"Bearer {token_data['access_token']}"}
+
+    response = client.post(
+        "/users",
+        json={
+            "username": "jane",
+            "email": "jane@example.com",
+            "password": "securepass",
+        },
+    )
+    assert response.status_code == 201
+    other_user_id = response.json()["id"]
+
+    response = client.get(
+        f"/users/{other_user_id}/portfolios",
+        headers=headers,
+    )
+    assert response.status_code == 403
+
     # Create a portfolio for the user
     response = client.post(
         f"/users/{user_id}/portfolios",
         json={"name": "Test Portfolio", "description": "Integration test"},
+        headers=headers,
     )
     assert response.status_code == 201
     portfolio_data = response.json()
@@ -73,7 +122,7 @@ def test_http_api_end_to_end_flow(tmp_path):
     portfolio_id = portfolio_data["id"]
 
     # List portfolios and verify the new portfolio is present
-    response = client.get(f"/users/{user_id}/portfolios")
+    response = client.get(f"/users/{user_id}/portfolios", headers=headers)
     assert response.status_code == 200
     portfolios = response.json()
     assert len(portfolios) == 1
@@ -87,6 +136,7 @@ def test_http_api_end_to_end_flow(tmp_path):
             "identifier_type": "TICKER",
             "type": "stock",
         },
+        headers=headers,
     )
     assert response.status_code == 201
     investment_data = response.json()
@@ -96,7 +146,8 @@ def test_http_api_end_to_end_flow(tmp_path):
 
     # List investments in the portfolio
     response = client.get(
-        f"/users/{user_id}/portfolios/{portfolio_id}/investments"
+        f"/users/{user_id}/portfolios/{portfolio_id}/investments",
+        headers=headers,
     )
     assert response.status_code == 200
     investments = response.json()
@@ -112,6 +163,7 @@ def test_http_api_end_to_end_flow(tmp_path):
             "broker": "TestBroker",
             "date": "2024-01-01T10:00:00",
         },
+        headers=headers,
     )
     assert response.status_code == 201
     transaction_data = response.json()
@@ -123,7 +175,8 @@ def test_http_api_end_to_end_flow(tmp_path):
 
     # List transactions for the investment
     response = client.get(
-        f"/users/{user_id}/investments/{investment_id}/transactions"
+        f"/users/{user_id}/investments/{investment_id}/transactions",
+        headers=headers,
     )
     assert response.status_code == 200
     transactions = response.json()

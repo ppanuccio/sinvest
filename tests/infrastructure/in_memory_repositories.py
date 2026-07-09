@@ -3,11 +3,13 @@
 from typing import Dict, List, Optional
 from datetime import datetime
 
+from app.domain.entities.auth import UserCredential
 from app.domain.entities.user import User
 from app.domain.entities.portfolio import Portfolio
 from app.domain.entities.investment import Investment
 from app.domain.entities.transaction import Transaction
 from app.domain.entities.price_history import PriceHistory
+from app.domain.repositories.credential_repository import CredentialRepository
 from app.domain.repositories.user_repository import UserRepository
 from app.domain.repositories.portfolio_repository import PortfolioRepository
 from app.domain.repositories.investment_repository import InvestmentRepository
@@ -51,6 +53,32 @@ class InMemoryUserRepository(UserRepository):
     def update(self, user: User) -> User:
         self._users[user.id] = user
         return user
+
+
+class InMemoryCredentialRepository(CredentialRepository):
+    """In-memory implementation of CredentialRepository for testing."""
+
+    def __init__(self):
+        self._credentials: Dict[str, UserCredential] = {}
+
+    def save(self, credential: UserCredential) -> UserCredential:
+        self._credentials[credential.user_id] = credential
+        return credential
+
+    def get_by_username(self, username: str) -> Optional[UserCredential]:
+        for credential in self._credentials.values():
+            if credential.username == username:
+                return credential
+        return None
+
+    def get_by_user_id(self, user_id: str) -> Optional[UserCredential]:
+        return self._credentials.get(user_id)
+
+    def delete_by_user_id(self, user_id: str) -> bool:
+        if user_id not in self._credentials:
+            return False
+        del self._credentials[user_id]
+        return True
 
 
 class InMemoryPortfolioRepository(PortfolioRepository):

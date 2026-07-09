@@ -28,6 +28,13 @@ class UnauthorizedException(DomainException):
         super().__init__(message)
 
 
+class AuthenticationFailedException(DomainException):
+    """Raised when credentials or tokens cannot be authenticated."""
+
+    def __init__(self, message: str = "Invalid username, password, or token"):
+        super().__init__(message)
+
+
 class InvalidIdentifierException(DomainException):
     """Raised when an investment identifier (ISIN or ticker) is invalid."""
 
