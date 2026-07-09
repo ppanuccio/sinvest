@@ -156,6 +156,7 @@
     th { color: var(--muted); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.04em; background: var(--surface-muted); }
     tbody tr { cursor: pointer; }
     tbody tr:hover { background: #f7fbfb; }
+    tbody tr.selected { background: #e5f3f1; border-left: 3px solid var(--primary); }
     tbody tr:last-child td { border-bottom: none; }
     .empty-row { color: var(--muted); text-align: center; padding: 30px 12px; }
     .positive { color: var(--success); }
@@ -199,16 +200,68 @@
       color: var(--text);
       border: 1px solid var(--border);
     }
-    @media (max-width: 1020px) {
-      .dashboard { grid-template-columns: 1fr; }
-      .controls-panel { position: static; }
+
+    /* New simplified UI styles */
+    .action-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
     }
+    .action-card h3 { margin: 0 0 12px; font-size: 0.95rem; font-weight: 650; color: var(--text); }
+    .action-card.primary { border-color: var(--primary); background: var(--primary-soft); }
+    .action-card.primary h3 { color: var(--primary-strong); }
+    .inline-form { display: grid; gap: 10px; }
+    .hidden { display: none !important; }
+    .step-indicator {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .step {
+      flex: 1;
+      text-align: center;
+      padding: 8px;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      font-weight: 650;
+      color: var(--muted);
+      background: var(--surface-muted);
+    }
+    .step.active { background: var(--primary); color: white; }
+    .step.complete { background: var(--success); color: white; }
+    .portfolio-picker {
+      display: grid;
+      gap: 8px;
+    }
+    .portfolio-picker select { width: 100%; }
+    .quick-add-section { display: grid; gap: 12px; }
+    .quick-add-section .action-card { margin-bottom: 0; }
+    .investment-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .tx-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     @media (max-width: 720px) {
-      .page { padding: 16px; }
-      .panel { padding: 16px; }
-      .card-grid, .split, .button-row { grid-template-columns: 1fr; }
-      .small-button { width: 100%; }
-      .composition-item { grid-template-columns: 1fr; }
+      .investment-form-row, .tx-form-row { grid-template-columns: 1fr; }
+    }
+    .selected-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: var(--primary-soft);
+      color: var(--primary-strong);
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 650;
+      margin-left: 8px;
+    }
+    .section-heading h2 { display: flex; align-items: center; gap: 8px; }
+    .auth-form { display: grid; gap: 12px; }
+    .auth-form .split { grid-template-columns: 1fr; }
+    @media (min-width: 480px) {
+      .auth-form .split { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
 </head>
@@ -217,103 +270,180 @@
     <div class="topbar">
       <div>
         <h1>sinvest Portfolio Dashboard</h1>
-        <p>See portfolio composition at a glance, inspect your current holdings by asset type, and understand which positions are gaining or losing value.</p>
+        <p>Track investments, add transactions, and monitor portfolio performance in one place.</p>
       </div>
       <div>
-        <button id="btn-refresh" class="small-button">Refresh data</button>
+        <button id="btn-refresh" class="small-button">Refresh Data</button>
       </div>
     </div>
 
-    <div id="status-message" class="status-message">Enter a user ID and load portfolios to begin.</div>
+    <div id="status-message" class="status-message">Welcome! Sign in or create an account to get started.</div>
 
     <div class="dashboard">
+      <!-- Left Panel: Streamlined Controls -->
       <div class="panel controls-panel">
-        <div class="section-heading"><h2>Account</h2></div>
-        <div class="stack">
-          <div class="form-group">
-            <label for="user-username">Username</label>
-            <input id="user-username" placeholder="Create a new user" />
-          </div>
-          <div class="form-group">
-            <label for="user-email">Email</label>
-            <input id="user-email" placeholder="user@example.com" />
-          </div>
-          <div class="form-group">
-            <label for="user-password">Password</label>
-            <input id="user-password" type="password" placeholder="Minimum 6 characters" />
-            <button id="btn-create-user">Create User</button>
+        <!-- Step Indicator -->
+        <div class="step-indicator" id="step-indicator">
+          <div class="step" data-step="1">1. Account</div>
+          <div class="step" data-step="2">2. Portfolio</div>
+          <div class="step" data-step="3">3. Investments</div>
+          <div class="step" data-step="4">4. Transactions</div>
+        </div>
+
+        <!-- Account Section -->
+        <div class="action-card" id="account-section">
+          <div class="section-heading"><h2>Account</h2></div>
+          <div class="auth-form" id="auth-form">
+            <div class="form-group">
+              <label for="user-username">Username</label>
+              <input id="user-username" placeholder="Create a username" autocomplete="username" />
+            </div>
+            <div class="form-group">
+              <label for="user-email">Email</label>
+              <input id="user-email" type="email" placeholder="you@example.com" autocomplete="email" />
+            </div>
+            <div class="form-group">
+              <label for="user-password">Password</label>
+              <input id="user-password" type="password" placeholder="Min 6 characters" autocomplete="new-password" />
+            </div>
+            <div class="button-row">
+              <button id="btn-create-user">Create Account</button>
+              <button id="btn-show-login" class="small-button">Sign In Instead</button>
+            </div>
             <pre id="out-create-user"></pre>
           </div>
-          <div class="form-group">
-            <label for="login-username">Sign In</label>
-            <input id="login-username" placeholder="Username" />
-            <input id="login-password" type="password" placeholder="Password" />
-            <div class="button-row">
-              <button id="btn-login">Login</button>
-              <button id="btn-logout" class="small-button">Logout</button>
+          <div class="auth-form hidden" id="login-form">
+            <div class="form-group">
+              <label for="login-username">Username</label>
+              <input id="login-username" placeholder="Your username" autocomplete="username" />
             </div>
-            <div id="auth-state" class="hint">Not authenticated.</div>
+            <div class="form-group">
+              <label for="login-password">Password</label>
+              <input id="login-password" type="password" placeholder="Your password" autocomplete="current-password" />
+            </div>
+            <div class="button-row">
+              <button id="btn-login">Sign In</button>
+              <button id="btn-show-create" class="small-button">Create Account</button>
+            </div>
+            <pre id="out-login"></pre>
+          </div>
+          <div id="auth-state" class="hint hidden">Signed in. Loading portfolios...</div>
+          <div id="user-info" class="hidden">
+            <div class="hint">Signed in as <strong id="display-username"></strong></div>
+            <button id="btn-logout" class="small-button" style="margin-top: 8px;">Sign Out</button>
           </div>
         </div>
-        <div class="divider"></div>
-        <div class="section-heading"><h2>Portfolio Controls</h2></div>
-        <div class="stack">
-          <div class="form-group">
-            <label for="portfolio-user-id">User ID</label>
-            <input id="portfolio-user-id" placeholder="e.g. 98ba..." />
-          </div>
-          <div class="button-row">
-            <button id="btn-list-portfolios">Load Portfolios</button>
-            <button id="btn-refresh-portfolio" class="small-button">Reload</button>
-          </div>
-          <div class="form-group">
+
+        <!-- Portfolio Section -->
+        <div class="action-card" id="portfolio-section">
+          <div class="section-heading"><h2>Portfolio</h2></div>
+          <div class="portfolio-picker">
             <label for="portfolio-select">Select Portfolio</label>
-            <select id="portfolio-select"></select>
+            <select id="portfolio-select">
+              <option value="" disabled selected>Sign in to load portfolios</option>
+            </select>
           </div>
-          <div class="form-group">
-            <label for="portfolio-name">Create Portfolio</label>
-            <input id="portfolio-name" placeholder="Portfolio name" />
-            <input id="portfolio-description" placeholder="Description" />
+          <div class="form-group hidden" id="create-portfolio-form">
+            <label for="portfolio-name">Create New Portfolio</label>
+            <input id="portfolio-name" placeholder="Portfolio name (e.g., 'Retirement', 'Trading')" />
+            <input id="portfolio-description" placeholder="Optional description" />
             <button id="btn-create-portfolio">Create Portfolio</button>
             <pre id="out-create-portfolio"></pre>
           </div>
+          <div class="button-row" style="margin-top: 8px;">
+            <button id="btn-show-create-portfolio" class="small-button">+ Create New Portfolio</button>
+            <button id="btn-hide-create-portfolio" class="small-button hidden">Cancel</button>
+          </div>
         </div>
-        <div class="divider"></div>
-        <div class="section-heading"><h2>Quick Actions</h2></div>
-        <div class="stack">
-          <div class="form-group">
-            <label for="inv-identifier">New Investment</label>
-            <input id="inv-identifier" placeholder="Ticker or ISIN" />
-            <div class="split">
-              <select id="inv-identifier-type"><option>ISIN</option><option selected>TICKER</option></select>
-              <select id="inv-type"><option>stock</option><option>bond</option><option>etf</option><option>crypto</option><option>mutual_fund</option><option>commodity</option><option>other</option></select>
+
+        <!-- Quick Add Section - Main Actions -->
+        <div class="action-card primary quick-add-section" id="quick-add-section" style="display: none;">
+          <div class="section-heading"><h2>⚡ Quick Actions</h2></div>
+
+          <!-- Add Investment Form -->
+          <div class="action-card" style="margin: 0; padding: 12px; background: var(--surface);">
+            <h3 style="margin: 0 0 10px; font-size: 0.85rem;">Add Investment</h3>
+            <div class="inline-form">
+              <div class="investment-form-row">
+                <div class="form-group">
+                  <label for="inv-identifier">Ticker / ISIN</label>
+                  <input id="inv-identifier" placeholder="e.g., AAPL, TSLA, US0378331005" />
+                </div>
+                <div class="form-group">
+                  <label for="inv-identifier-type">Type</label>
+                  <select id="inv-identifier-type">
+                    <option value="TICKER" selected>Ticker</option>
+                    <option value="ISIN">ISIN</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="inv-type">Asset Class</label>
+                <select id="inv-type">
+                  <option value="stock" selected>Stock</option>
+                  <option value="etf">ETF</option>
+                  <option value="crypto">Crypto</option>
+                  <option value="bond">Bond</option>
+                  <option value="mutual_fund">Mutual Fund</option>
+                  <option value="commodity">Commodity</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <button id="btn-create-investment" style="width: 100%;">Add Investment</button>
             </div>
-            <button id="btn-create-investment">Add investment</button>
             <pre id="out-create-investment"></pre>
           </div>
-          <div class="form-group">
-            <label for="tx-investment-id">Transaction for Investment</label>
-            <input id="tx-investment-id" placeholder="Investment ID" />
-            <div class="split">
-              <input id="tx-amount" placeholder="Amount (USD)" />
-              <input id="tx-quantity" placeholder="Quantity" />
+
+          <!-- Add Transaction Form -->
+          <div class="action-card" style="margin: 0; padding: 12px; background: var(--surface);">
+            <h3 style="margin: 0 0 10px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px;">
+              Add Transaction
+              <span id="tx-investment-badge" class="selected-badge hidden"></span>
+            </h3>
+            <div class="inline-form">
+              <div id="tx-no-selection" class="hint" style="text-align: center; padding: 20px; background: var(--surface-muted); border-radius: 6px;">
+                Click an investment in the table to the right to prefill this form
+              </div>
+              <div id="tx-form" class="hidden">
+                <input type="hidden" id="tx-investment-id" />
+                <div class="tx-form-row">
+                  <div class="form-group">
+                    <label for="tx-quantity">Quantity</label>
+                    <input id="tx-quantity" type="number" step="0.000001" placeholder="e.g., 10" />
+                  </div>
+                  <div class="form-group">
+                    <label for="tx-amount">Amount (USD)</label>
+                    <input id="tx-amount" type="number" step="0.01" placeholder="e.g., 1500.00" />
+                  </div>
+                </div>
+                <div class="tx-form-row">
+                  <div class="form-group">
+                    <label for="tx-broker">Broker</label>
+                    <input id="tx-broker" placeholder="e.g., Interactive Brokers, Robinhood" />
+                  </div>
+                  <div class="form-group">
+                    <label for="tx-date">Date & Time</label>
+                    <input id="tx-date" type="datetime-local" />
+                  </div>
+                </div>
+                <button id="btn-create-transaction" style="width: 100%;">Add Transaction</button>
+              </div>
             </div>
-            <input id="tx-broker" placeholder="Broker" />
-            <input id="tx-date" placeholder="2024-01-01T10:00:00" />
-            <button id="btn-create-transaction">Add transaction</button>
             <pre id="out-create-transaction"></pre>
           </div>
         </div>
       </div>
 
+      <!-- Right Panel: Portfolio View -->
       <div class="panel">
         <div class="overview-header">
           <div>
             <h2>Portfolio Overview</h2>
             <div class="hint">Live snapshot of value, allocation, holdings, and transaction history.</div>
           </div>
-          <div id="portfolio-meta" class="portfolio-meta">No portfolio selected.</div>
+          <div id="portfolio-meta" class="portfolio-meta">Sign in and select a portfolio to begin.</div>
         </div>
+
         <div class="card-grid">
           <div class="metric-card">
             <label>Total Value</label>
@@ -328,9 +458,14 @@
             <span id="summary-yield" class="positive">–</span>
           </div>
         </div>
+
         <div class="section-heading"><h2>Asset Mix</h2></div>
         <ul id="composition-list" class="composition-list"></ul>
-        <div class="section-heading" style="margin-top:22px;"><h2>Holdings</h2></div>
+
+        <div class="section-heading" style="margin-top:22px;">
+          <h2>Holdings</h2>
+          <div id="holdings-count" class="hint" style="font-weight: 500;"></div>
+        </div>
         <div class="table-wrapper">
           <table>
             <thead>
@@ -348,8 +483,8 @@
             <tbody id="investments-table"></tbody>
           </table>
         </div>
-        <ul id="out-list-investments" style="display:none;"></ul>
-        <div class="footer-note">Click an investment row to prefill transaction creation and inspect transactions below.</div>
+        <div class="footer-note">Click a row to select it for adding transactions. Double-click to view transactions.</div>
+
         <div class="section-heading" style="margin-top:22px;"><h2>Transactions</h2></div>
         <pre id="out-list-transactions" class="transactions-output">Select an investment to view transaction history.</pre>
       </div>

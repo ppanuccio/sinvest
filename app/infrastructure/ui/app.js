@@ -62,8 +62,9 @@ function saveAuth(tokenData) {
       user_id: tokenData.user_id,
     }),
   );
-  document.getElementById('portfolio-user-id').value = tokenData.user_id;
   renderAuthState();
+  updateStepIndicator(2);
+  refreshPortfolios();
 }
 
 function restoreAuth() {
@@ -88,20 +89,47 @@ function clearAuth() {
   state.portfolio = null;
   state.investments = [];
   localStorage.removeItem(AUTH_STORAGE_KEY);
-  document.getElementById('portfolio-user-id').value = '';
   renderAuthState();
   renderPortfolioMeta();
   renderOverview();
   renderComposition();
   renderInvestments();
-  setStatus('Logged out.');
+  updateStepIndicator(1);
+  setStatus('Signed out.');
 }
 
 function renderAuthState() {
   const authState = document.getElementById('auth-state');
-  authState.textContent = state.authToken
-    ? `Authenticated as ${state.authUsername}.`
-    : 'Not authenticated.';
+  const userInfo = document.getElementById('user-info');
+  const displayUsername = document.getElementById('display-username');
+  const authForm = document.getElementById('auth-form');
+  const loginForm = document.getElementById('login-form');
+
+  if (state.authToken) {
+    authState.classList.add('hidden');
+    userInfo.classList.remove('hidden');
+    authForm.classList.add('hidden');
+    loginForm.classList.add('hidden');
+    displayUsername.textContent = state.authUsername;
+    document.getElementById('portfolio-section').classList.remove('hidden');
+    document.getElementById('quick-add-section').style.display = 'grid';
+  } else {
+    authState.classList.add('hidden');
+    userInfo.classList.add('hidden');
+    authForm.classList.remove('hidden');
+    loginForm.classList.add('hidden');
+    document.getElementById('portfolio-section').classList.add('hidden');
+    document.getElementById('quick-add-section').style.display = 'none';
+  }
+}
+
+function updateStepIndicator(step) {
+  document.querySelectorAll('.step').forEach(el => {
+    const s = parseInt(el.dataset.step, 10);
+    el.classList.remove('active', 'complete');
+    if (s < step) el.classList.add('complete');
+    else if (s === step) el.classList.add('active');
+  });
 }
 
 async function loadPortfolios(userId) {
@@ -114,14 +142,14 @@ async function loadPortfolios(userId) {
 }
 
 async function refreshPortfolios() {
-  const userId = document.getElementById('portfolio-user-id').value.trim();
+  const userId = state.userId;
   if (!userId) {
-    setStatus('Enter a user ID to load portfolios.', true);
+    setStatus('Not authenticated.', true);
     return;
   }
   const portfolios = await loadPortfolios(userId);
   const select = document.getElementById('portfolio-select');
-  select.innerHTML = '<option value="" disabled selected>Select portfolio...</option>';
+  select.innerHTML = '<option value="" disabled selected>Select a portfolio...</option>';
   portfolios.forEach((portfolio) => {
     const option = document.createElement('option');
     option.value = portfolio.id;
@@ -129,8 +157,7 @@ async function refreshPortfolios() {
     select.appendChild(option);
   });
   if (portfolios.length === 0) {
-    setStatus('No portfolios found for this user. Create one to get started.');
-    state.userId = userId;
+    setStatus('No portfolios found. Create one to get started.');
     state.portfolioId = '';
     state.analytics = null;
     state.portfolio = null;
@@ -141,16 +168,7 @@ async function refreshPortfolios() {
     renderInvestments();
     return;
   }
-  state.userId = userId;
-  state.portfolioId = '';
-  state.analytics = null;
-  state.portfolio = null;
-  state.investments = [];
-  setStatus('Portfolios loaded. Choose one to view holdings.');
-  renderPortfolioMeta();
-  renderOverview();
-  renderComposition();
-  renderInvestments();
+  setStatus('Portfolios loaded. Select one to continue.');
 }
 
 async function refreshDashboard() {
@@ -183,16 +201,19 @@ function renderPortfolioMeta() {
 }
 
 async function createPortfolio() {
-  const userId = document.getElementById('portfolio-user-id').value.trim();
+  const userId = state.userId;
   const name = document.getElementById('portfolio-name').value.trim();
   const description = document.getElementById('portfolio-description').value.trim();
   if (!userId || !name) {
-    setStatus('User ID and portfolio name are required.', true);
+    setStatus('Portfolio name is required.', true);
     return;
   }
   const res = await request('POST', `/users/${userId}/portfolios`, { name, description });
   if (res.status === 201 || res.status === 200) {
     setStatus('Portfolio created successfully.');
+    document.getElementById('portfolio-name').value = '';
+    document.getElementById('portfolio-description').value = '';
+    toggleCreatePortfolioForm(false);
     await refreshPortfolios();
   } else {
     setStatus(res.data.detail || 'Failed to create portfolio.', true);
@@ -200,9 +221,24 @@ async function createPortfolio() {
   document.getElementById('out-create-portfolio').textContent = JSON.stringify(res, null, 2);
 }
 
+function toggleCreatePortfolioForm(show) {
+  const form = document.getElementById('create-portfolio-form');
+  const showBtn = document.getElementById('btn-show-create-portfolio');
+  const hideBtn = document.getElementById('btn-hide-create-portfolio');
+  if (show) {
+    form.classList.remove('hidden');
+    showBtn.classList.add('hidden');
+    hideBtn.classList.remove('hidden');
+  } else {
+    form.classList.add('hidden');
+    showBtn.classList.remove('hidden');
+    hideBtn.classList.add('hidden');
+  }
+}
+
 async function createInvestment() {
-  const portfolioId = document.getElementById('portfolio-select').value;
-  const userId = document.getElementById('portfolio-user-id').value.trim();
+  const portfolioId = state.portfolioId;
+  const userId = state.userId;
   const identifier = document.getElementById('inv-identifier').value.trim();
   const identifierType = document.getElementById('inv-identifier-type').value;
   const type = document.getElementById('inv-type').value;
@@ -219,6 +255,7 @@ async function createInvestment() {
   document.getElementById('out-create-investment').textContent = JSON.stringify(res, null, 2);
   if (res.status === 201 || res.status === 200) {
     setStatus('Investment added. Refreshing holdings.');
+    document.getElementById('inv-identifier').value = '';
     await refreshDashboard();
   } else {
     setStatus(res.data.detail || 'Failed to add investment.', true);
@@ -230,22 +267,18 @@ async function createUser() {
   const email = document.getElementById('user-email').value.trim();
   const password = document.getElementById('user-password').value.trim();
   if (!username || !email || !password) {
-    setStatus('Username, email, and password are required to create an account.', true);
+    setStatus('Username, email, and password are required.', true);
     return;
   }
   const res = await request('POST', '/users', { username, email, password });
   document.getElementById('out-create-user').textContent = JSON.stringify(res, null, 2);
   if (res.status === 201 || res.status === 200) {
-    setStatus('User created. Signing in.');
-    const userId = res.data.id || '';
-    if (userId) {
-      document.getElementById('portfolio-user-id').value = userId;
-    }
+    setStatus('Account created. Signing in...');
     document.getElementById('login-username').value = username;
     document.getElementById('login-password').value = password;
     await login();
   } else {
-    setStatus(res.data.detail || 'Failed to create user.', true);
+    setStatus(res.data.detail || 'Failed to create account.', true);
   }
 }
 
@@ -253,21 +286,21 @@ async function login() {
   const username = document.getElementById('login-username').value.trim();
   const password = document.getElementById('login-password').value.trim();
   if (!username || !password) {
-    setStatus('Username and password are required to login.', true);
+    setStatus('Username and password are required.', true);
     return;
   }
 
   const res = await request('POST', '/auth/login', { username, password });
   if (res.status === 200) {
     saveAuth(res.data);
-    setStatus('Login successful. Load portfolios to continue.');
+    setStatus('Sign in successful.');
   } else {
-    setStatus(res.data.detail || 'Login failed.', true);
+    setStatus(res.data.detail || 'Sign in failed.', true);
   }
 }
 
 async function createTransaction() {
-  const userId = document.getElementById('portfolio-user-id').value.trim();
+  const userId = state.userId;
   const investmentId = document.getElementById('tx-investment-id').value.trim();
   const amount = document.getElementById('tx-amount').value.trim();
   const quantity = document.getElementById('tx-quantity').value.trim();
@@ -286,7 +319,10 @@ async function createTransaction() {
   });
   document.getElementById('out-create-transaction').textContent = JSON.stringify(res, null, 2);
   if (res.status === 201 || res.status === 200) {
-    setStatus('Transaction created. Refreshing transaction history.');
+    setStatus('Transaction created. Refreshing...');
+    document.getElementById('tx-quantity').value = '';
+    document.getElementById('tx-amount').value = '';
+    document.getElementById('tx-broker').value = '';
     await loadTransactions(userId, investmentId);
     await refreshDashboard();
   } else {
@@ -331,7 +367,6 @@ async function loadInvestments(userId, portfolioId) {
       };
     });
   } else {
-    // If the API returns InvestmentResponseModel list, convert to minimal analytics-like structure.
     state.investments = res.data.map((inv) => ({
       investment_id: inv.id,
       identifier: inv.identifier,
@@ -421,11 +456,14 @@ function renderComposition() {
 
 function renderInvestments() {
   const tbody = document.getElementById('investments-table');
+  const countEl = document.getElementById('holdings-count');
   tbody.innerHTML = '';
   if (!Array.isArray(state.investments) || state.investments.length === 0) {
-    tbody.innerHTML = '<tr><td class="empty-row" colspan="8">No investments found for this portfolio.</td></tr>';
+    tbody.innerHTML = '<tr><td class="empty-row" colspan="8">No investments found. Add your first investment using the form on the left.</td></tr>';
+    countEl.textContent = '';
     return;
   }
+  countEl.textContent = `${state.investments.length} holding${state.investments.length !== 1 ? 's' : ''}`;
   state.investments.forEach((inv) => {
     const row = document.createElement('tr');
     const gainClass = Number(inv.yield_amount) >= 0 ? 'positive' : 'negative';
@@ -440,38 +478,87 @@ function renderInvestments() {
       <td class="${gainClass}">${formatMoney(inv.yield_amount)} (${formatPercent(inv.yield_percentage)})</td>
       <td>${formatPercent(inv.allocation_percentage)}</td>
     `;
-    row.addEventListener('click', () => {
-      if (!inv.investment_id) return;
-      state.investmentId = inv.investment_id;
-      document.getElementById('tx-investment-id').value = inv.investment_id;
-      loadTransactions(state.userId, inv.investment_id);
-      setStatus(`Selected ${inv.identifier}. Add a transaction below.`);
+    row.dataset.investmentId = inv.investment_id || '';
+    row.dataset.identifier = inv.identifier || '';
+    row.addEventListener('click', () => selectInvestment(inv));
+    row.addEventListener('dblclick', () => {
+      if (inv.investment_id) loadTransactions(state.userId, inv.investment_id);
     });
+    if (inv.investment_id === state.investmentId) {
+      row.classList.add('selected');
+    }
     tbody.appendChild(row);
   });
 }
 
+function selectInvestment(inv) {
+  if (!inv.investment_id) return;
+  state.investmentId = inv.investment_id;
+
+  // Update UI selection
+  document.querySelectorAll('#investments-table tr').forEach(r => r.classList.remove('selected'));
+  const selectedRow = document.querySelector(`#investments-table tr[data-investment-id="${inv.investment_id}"]`);
+  if (selectedRow) selectedRow.classList.add('selected');
+
+  // Show and prefill transaction form
+  document.getElementById('tx-no-selection').classList.add('hidden');
+  document.getElementById('tx-form').classList.remove('hidden');
+  document.getElementById('tx-investment-id').value = inv.investment_id;
+  document.getElementById('tx-quantity').value = '';
+  document.getElementById('tx-amount').value = '';
+  document.getElementById('tx-broker').value = '';
+  document.getElementById('tx-date').value = new Date().toISOString().slice(0, 16);
+
+  // Update badge
+  const badge = document.getElementById('tx-investment-badge');
+  badge.textContent = inv.identifier;
+  badge.classList.remove('hidden');
+
+  loadTransactions(state.userId, inv.investment_id);
+  setStatus(`Selected ${inv.identifier}. Fill in transaction details and click "Add Transaction".`);
+}
+
 function initializeEventListeners() {
-  document.getElementById('btn-list-portfolios').addEventListener('click', refreshPortfolios);
-  document.getElementById('btn-refresh-portfolio').addEventListener('click', refreshPortfolios);
+  // Auth toggles
+  document.getElementById('btn-show-login').addEventListener('click', () => {
+    document.getElementById('auth-form').classList.add('hidden');
+    document.getElementById('login-form').classList.remove('hidden');
+  });
+  document.getElementById('btn-show-create').addEventListener('click', () => {
+    document.getElementById('login-form').classList.add('hidden');
+    document.getElementById('auth-form').classList.remove('hidden');
+  });
+
+  // Auth actions
   document.getElementById('btn-create-user').addEventListener('click', createUser);
   document.getElementById('btn-login').addEventListener('click', login);
   document.getElementById('btn-logout').addEventListener('click', clearAuth);
+
+  // Portfolio actions
   document.getElementById('btn-create-portfolio').addEventListener('click', createPortfolio);
-  document.getElementById('btn-create-investment').addEventListener('click', createInvestment);
-  document.getElementById('btn-create-transaction').addEventListener('click', createTransaction);
-  document.getElementById('btn-refresh').addEventListener('click', refreshDashboard);
+  document.getElementById('btn-show-create-portfolio').addEventListener('click', () => toggleCreatePortfolioForm(true));
+  document.getElementById('btn-hide-create-portfolio').addEventListener('click', () => toggleCreatePortfolioForm(false));
+
   document.getElementById('portfolio-select').addEventListener('change', async (event) => {
     state.portfolioId = event.target.value;
     if (!state.userId || !state.portfolioId) {
-      setStatus('Select a valid portfolio and user first.', true);
+      setStatus('Select a valid portfolio first.', true);
       return;
     }
-    setStatus('Loading selected portfolio...');
+    updateStepIndicator(3);
+    setStatus('Loading portfolio...');
     await loadPortfolioDetails(state.userId, state.portfolioId);
     await loadAnalytics(state.userId, state.portfolioId);
     await loadInvestments(state.userId, state.portfolioId);
   });
+
+  // Quick actions
+  document.getElementById('btn-create-investment').addEventListener('click', createInvestment);
+  document.getElementById('btn-create-transaction').addEventListener('click', createTransaction);
+  document.getElementById('btn-refresh').addEventListener('click', refreshDashboard);
+
+  // Set default date to now
+  document.getElementById('tx-date').value = new Date().toISOString().slice(0, 16);
 }
 
 window.addEventListener('load', () => {
@@ -481,8 +568,5 @@ window.addEventListener('load', () => {
   renderOverview();
   renderComposition();
   renderInvestments();
-  const userId = document.getElementById('portfolio-user-id').value.trim();
-  if (userId) {
-    refreshPortfolios();
-  }
+  updateStepIndicator(state.authToken ? 2 : 1);
 });
