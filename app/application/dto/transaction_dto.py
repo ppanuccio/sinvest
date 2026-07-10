@@ -17,6 +17,7 @@ class CreateTransactionDTO:
     quantity: Decimal
     broker: str
     date: datetime
+    currency: str = "USD"
 
 
 @dataclass
@@ -27,6 +28,7 @@ class UpdateTransactionDTO:
     quantity: Optional[Decimal] = None
     broker: Optional[str] = None
     date: Optional[datetime] = None
+    currency: Optional[str] = None
 
 
 @dataclass
@@ -59,6 +61,7 @@ class TransactionResponseDTO:
     date: datetime
     created_at: datetime
     updated_at: datetime
+    currency: str = "USD"
 
     class Config:
         from_attributes = True

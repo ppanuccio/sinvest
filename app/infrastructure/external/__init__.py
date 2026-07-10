@@ -1,0 +1,1 @@
+"""External infrastructure services - adapters for third-party APIs."""

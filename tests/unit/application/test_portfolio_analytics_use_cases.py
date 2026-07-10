@@ -117,13 +117,14 @@ class TestPortfolioAnalyticsUseCases:
 
         return user.id, portfolio.id, investment.id
 
-    def test_get_portfolio_analytics_success(
+    @pytest.mark.asyncio
+    async def test_get_portfolio_analytics_success(
         self, use_cases, setup_portfolio_with_data
     ):
         """Test getting portfolio analytics."""
         user_id, portfolio_id, investment_id = setup_portfolio_with_data
 
-        result = use_cases["analytics"].get_portfolio_analytics(
+        result = await use_cases["analytics"].get_portfolio_analytics(
             portfolio_id, user_id
         )
 
@@ -133,13 +134,14 @@ class TestPortfolioAnalyticsUseCases:
         assert result.total_yield > 0  # 500
         assert len(result.investments) == 1
 
-    def test_portfolio_analytics_calculations(
+    @pytest.mark.asyncio
+    async def test_portfolio_analytics_calculations(
         self, use_cases, setup_portfolio_with_data
     ):
         """Test that analytics calculations are correct."""
         user_id, portfolio_id, investment_id = setup_portfolio_with_data
 
-        result = use_cases["analytics"].get_portfolio_analytics(
+        result = await use_cases["analytics"].get_portfolio_analytics(
             portfolio_id, user_id
         )
 
@@ -153,31 +155,34 @@ class TestPortfolioAnalyticsUseCases:
         assert result.total_yield == Decimal("500")
         assert result.total_yield_percentage == Decimal("50")
 
-    def test_portfolio_analytics_allocation(
+    @pytest.mark.asyncio
+    async def test_portfolio_analytics_allocation(
         self, use_cases, setup_portfolio_with_data
     ):
         """Test allocation percentage calculation."""
         user_id, portfolio_id, investment_id = setup_portfolio_with_data
 
-        result = use_cases["analytics"].get_portfolio_analytics(
+        result = await use_cases["analytics"].get_portfolio_analytics(
             portfolio_id, user_id
         )
 
         # Single investment = 100% allocation
         assert result.allocation[investment_id] == Decimal("100")
 
-    def test_portfolio_analytics_unauthorized(
+    @pytest.mark.asyncio
+    async def test_portfolio_analytics_unauthorized(
         self, use_cases, setup_portfolio_with_data
     ):
         """Test that unauthorized user cannot access analytics."""
         user_id, portfolio_id, investment_id = setup_portfolio_with_data
 
         with pytest.raises(UnauthorizedException):
-            use_cases["analytics"].get_portfolio_analytics(
+            await use_cases["analytics"].get_portfolio_analytics(
                 portfolio_id, "different-user"
             )
 
-    def test_portfolio_analytics_multiple_investments(self, use_cases):
+    @pytest.mark.asyncio
+    async def test_portfolio_analytics_multiple_investments(self, use_cases):
         """Test analytics with multiple investments."""
         # Create user and portfolio
         user_dto = CreateUserDTO(
@@ -248,7 +253,7 @@ class TestPortfolioAnalyticsUseCases:
         use_cases["price_history"].record_price(user.id, price2_dto)
 
         # Get analytics
-        result = use_cases["analytics"].get_portfolio_analytics(
+        result = await use_cases["analytics"].get_portfolio_analytics(
             portfolio.id, user.id
         )
 

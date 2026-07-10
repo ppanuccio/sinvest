@@ -7,6 +7,10 @@ from typing import List
 from app.domain.entities.investment import Investment
 from app.domain.repositories.investment_repository import InvestmentRepository
 from app.domain.repositories.portfolio_repository import PortfolioRepository
+from app.domain.repositories.transaction_repository import TransactionRepository
+from app.domain.repositories.price_history_repository import (
+    PriceHistoryRepository,
+)
 from app.domain.value_objects import Identifier, InvestmentType
 from app.domain.services.validation_service import ValidationService
 from app.domain.exceptions import (
@@ -28,9 +32,13 @@ class InvestmentUseCases:
         self,
         investment_repository: InvestmentRepository,
         portfolio_repository: PortfolioRepository,
+        transaction_repository: TransactionRepository | None = None,
+        price_history_repository: PriceHistoryRepository | None = None,
     ):
         self.investment_repository = investment_repository
         self.portfolio_repository = portfolio_repository
+        self.transaction_repository = transaction_repository
+        self.price_history_repository = price_history_repository
         self.validation_service = ValidationService()
 
     def create_investment(
@@ -145,7 +153,7 @@ class InvestmentUseCases:
         return self._to_response_dto(investment)
 
     def delete_investment(self, investment_id: str, user_id: str) -> None:
-        """Delete an investment."""
+        """Delete an investment and its related transactions and price history."""
         # Get and verify ownership
         investment = self.investment_repository.get_by_id(investment_id)
         if not investment:
@@ -159,7 +167,13 @@ class InvestmentUseCases:
                 f"User {user_id} does not own investment {investment_id}"
             )
 
-        # Delete
+        # Clean up related data
+        if self.transaction_repository:
+            self.transaction_repository.delete_by_investment(investment_id)
+        if self.price_history_repository:
+            self.price_history_repository.delete_by_investment(investment_id)
+
+        # Delete the investment
         self.investment_repository.delete(investment_id)
 
     def _to_response_dto(self, investment: Investment) -> InvestmentResponseDTO:

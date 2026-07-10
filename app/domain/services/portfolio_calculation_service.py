@@ -24,9 +24,13 @@ class PortfolioCalculationService:
         investments: List[Investment],
         transactions_by_investment: Dict[str, List[Transaction]],
         price_history_by_investment: Dict[str, List[PriceHistory]],
+        reference_currency: str = "USD",
+        rates: dict[str, Decimal] | None = None,
     ) -> tuple[Money, Money, Yield, Optional[Decimal]]:
         """
         Calculate portfolio-level totals.
+        All amounts are converted to reference_currency using the provided rates.
+
         Returns: (total_current_value, total_invested, total_yield, total_yield_percentage)
         """
         if not investments:
@@ -37,10 +41,12 @@ class PortfolioCalculationService:
                 None,
             )
 
+        if rates is None:
+            rates = {}
+
         total_value = Decimal("0")
         total_invested = Decimal("0")
         total_yield = Decimal("0")
-        currency = None
 
         for investment in investments:
             transactions = transactions_by_investment.get(investment.id, [])
@@ -54,41 +60,35 @@ class PortfolioCalculationService:
 
             current_price = price_history[0].price  # Latest price
 
-            # Calculate investment metrics
-            inv_value = InvestmentCalculationService.calculate_total_value(
-                transactions, current_price
-            )
-            inv_invested = (
-                InvestmentCalculationService.calculate_total_invested_amount(
-                    transactions
+            try:
+                inv_value = InvestmentCalculationService.calculate_total_value(
+                    transactions, current_price, reference_currency, rates
                 )
-            )
-            initial_amount = (
-                InvestmentCalculationService.calculate_initial_amount(
-                    transactions
+                inv_invested = (
+                    InvestmentCalculationService.calculate_total_invested_amount(
+                        transactions, reference_currency, rates
+                    )
                 )
-            )
-            inv_yield = InvestmentCalculationService.calculate_yield(
-                inv_value, initial_amount
-            )
-
-            # Set currency from first investment
-            if currency is None:
-                currency = current_price.currency
-            elif currency != current_price.currency:
-                raise InvalidPortfolioException(
-                    f"Mixed currencies in portfolio: {currency} and {current_price.currency}"
+                initial_amount = InvestmentCalculationService._convert_amount(
+                    InvestmentCalculationService.calculate_initial_amount(
+                        transactions
+                    ) or Money(Decimal("0")),
+                    reference_currency,
+                    rates,
                 )
+                inv_yield = InvestmentCalculationService.calculate_yield(
+                    inv_value, initial_amount
+                )
+            except Exception:
+                # Skip this investment — can't calculate
+                continue
 
             total_value += inv_value.amount
             total_invested += inv_invested.amount
             total_yield += inv_yield.amount
 
-        if currency is None:
-            currency = "USD"
-
-        total_value_obj = Money(total_value, currency)
-        total_invested_obj = Money(total_invested, currency)
+        total_value_obj = Money(total_value, reference_currency)
+        total_invested_obj = Money(total_invested, reference_currency)
         total_yield_obj = Yield(total_yield)
 
         # Calculate portfolio yield percentage
@@ -103,15 +103,21 @@ class PortfolioCalculationService:
         investments: List[Investment],
         transactions_by_investment: Dict[str, List[Transaction]],
         price_history_by_investment: Dict[str, List[PriceHistory]],
+        reference_currency: str = "USD",
+        rates: dict[str, Decimal] | None = None,
     ) -> Dict[str, Decimal]:
         """
         Calculate allocation percentages for each investment.
+        All amounts are converted to reference_currency using the provided rates.
         Returns: {investment_id: percentage}
         """
         allocation = {}
 
         if not investments:
             return allocation
+
+        if rates is None:
+            rates = {}
 
         total_value = Decimal("0")
         investment_values = {}
@@ -127,12 +133,14 @@ class PortfolioCalculationService:
                 continue
 
             current_price = price_history[0].price
-            inv_value = InvestmentCalculationService.calculate_total_value(
-                transactions, current_price
-            )
-
-            investment_values[investment.id] = inv_value.amount
-            total_value += inv_value.amount
+            try:
+                inv_value = InvestmentCalculationService.calculate_total_value(
+                    transactions, current_price, reference_currency, rates
+                )
+                investment_values[investment.id] = inv_value.amount
+                total_value += inv_value.amount
+            except Exception:
+                investment_values[investment.id] = Decimal("0")
 
         # Calculate percentages
         if total_value > 0:

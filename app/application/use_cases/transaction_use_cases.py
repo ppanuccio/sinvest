@@ -60,7 +60,7 @@ class TransactionUseCases:
         self.validation_service.validate_transaction_date(dto.date)
 
         # Create value objects
-        money = Money(dto.amount, "USD")
+        money = Money(dto.amount, dto.currency)
         quantity = Quantity(dto.quantity)
 
         # Create transaction entity
@@ -157,7 +157,8 @@ class TransactionUseCases:
 
         if dto.amount is not None:
             self.validation_service.validate_transaction_amount(dto.amount)
-            updated_amount = Money(dto.amount, "USD")
+            currency = dto.currency or transaction.amount.currency
+            updated_amount = Money(dto.amount, currency)
 
         if dto.quantity is not None:
             self.validation_service.validate_transaction_quantity(
@@ -218,4 +219,5 @@ class TransactionUseCases:
             date=transaction.date,
             created_at=transaction.created_at,
             updated_at=transaction.updated_at,
+            currency=transaction.amount.currency,
         )

@@ -10,6 +10,7 @@ const state = {
   portfolio: null,
   authToken: '',
   authUsername: '',
+  referenceCurrency: 'USD',
 };
 
 function setStatus(message, isError = false) {
@@ -32,7 +33,8 @@ function isMissing(value) {
 
 function formatMoney(value) {
   if (isMissing(value)) return '—';
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value));
+  const currency = state.referenceCurrency || 'USD';
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(Number(value));
 }
 
 function formatPercent(value) {
@@ -306,6 +308,7 @@ async function createTransaction() {
   const quantity = document.getElementById('tx-quantity').value.trim();
   const broker = document.getElementById('tx-broker').value.trim();
   const date = document.getElementById('tx-date').value.trim();
+  const currency = document.getElementById('tx-currency').value;
   if (!userId || !investmentId || !amount || !quantity || !broker || !date) {
     setStatus('All transaction fields are required.', true);
     return;
@@ -316,6 +319,7 @@ async function createTransaction() {
     quantity,
     broker,
     date,
+    currency,
   });
   document.getElementById('out-create-transaction').textContent = JSON.stringify(res, null, 2);
   if (res.status === 201 || res.status === 200) {
@@ -331,7 +335,8 @@ async function createTransaction() {
 }
 
 async function loadAnalytics(userId, portfolioId) {
-  const res = await request('GET', `/users/${userId}/portfolios/${portfolioId}/analytics`);
+  const refCurrency = state.referenceCurrency || 'USD';
+  const res = await request('GET', `/users/${userId}/portfolios/${portfolioId}/analytics?reference_currency=${refCurrency}`);
   if (res.status !== 200) {
     setStatus('Unable to load portfolio analytics.', true);
     state.analytics = null;
@@ -383,7 +388,72 @@ async function loadInvestments(userId, portfolioId) {
   renderInvestments();
 }
 
-async function loadTransactions(userId, investmentId) {
+async function fetchPrice(investmentId, identifier) {
+  const userId = state.userId;
+  if (!userId || !investmentId) {
+    setStatus('Select an investment first.', true);
+    return;
+  }
+  setStatus(`Fetching live price for ${identifier} from Yahoo Finance...`);
+  const res = await request('POST', `/users/${userId}/investments/${investmentId}/prices/fetch`);
+  if (res.status === 201) {
+    setStatus(`✅ ${identifier}: ${formatMoney(res.data.price)} as of ${res.data.date}`);
+    await refreshDashboard();
+  } else {
+    setStatus(res.data.detail || `Failed to fetch price for ${identifier}.`, true);
+  }
+}
+
+async function deleteInvestment(investmentId, identifier) {
+  const userId = state.userId;
+  if (!userId || !investmentId) return;
+
+  if (!confirm(`Delete ${identifier} and all its transactions and price history?`)) return;
+
+  const res = await request('DELETE', `/users/${userId}/investments/${investmentId}`);
+  if (res.status === 204) {
+    setStatus(`🗑️ Deleted ${identifier}.`);
+    await refreshDashboard();
+  } else {
+    setStatus(res.data.detail || `Failed to delete ${identifier}.`, true);
+  }
+}
+
+async function fetchAllPrices() {
+  const userId = state.userId;
+  const portfolioId = state.portfolioId;
+  if (!userId || !portfolioId) {
+    setStatus('Select a portfolio first.', true);
+    return;
+  }
+
+  // Get all investment IDs from the analytics
+  const investments = state.investments;
+  if (!investments || investments.length === 0) {
+    setStatus('No investments to fetch prices for.', true);
+    return;
+  }
+
+  const investmentIds = investments
+    .map(inv => inv.investment_id)
+    .filter(id => id);
+
+  if (investmentIds.length === 0) {
+    setStatus('No valid investment IDs found.', true);
+    return;
+  }
+
+  setStatus(`Fetching live prices for ${investmentIds.length} investment(s) from Yahoo Finance...`);
+  const res = await request('POST', `/users/${userId}/investments/prices/fetch-batch`, investmentIds);
+  if (res.status === 201) {
+    const count = Array.isArray(res.data) ? res.data.length : 0;
+    setStatus(`✅ Fetched ${count} price(s) successfully.`);
+    await refreshDashboard();
+  } else {
+    setStatus(res.data.detail || 'Failed to fetch prices.', true);
+  }
+}
+  async function loadTransactions(userId, investmentId) {
   const output = document.getElementById('out-list-transactions');
   if (!investmentId) {
     output.textContent = 'Select an investment to view transaction history.';
@@ -400,7 +470,7 @@ async function loadTransactions(userId, investmentId) {
     return;
   }
   output.textContent = list
-    .map((item) => `${item.date} • ${item.quantity} @ ${formatMoney(item.amount)} • ${item.broker}`)
+    .map((item) => `${item.date} • ${item.quantity} @ ${formatMoney(item.amount)} ${item.currency || 'USD'} • ${item.broker}`)
     .join('\n');
 }
 
@@ -459,7 +529,7 @@ function renderInvestments() {
   const countEl = document.getElementById('holdings-count');
   tbody.innerHTML = '';
   if (!Array.isArray(state.investments) || state.investments.length === 0) {
-    tbody.innerHTML = '<tr><td class="empty-row" colspan="8">No investments found. Add your first investment using the form on the left.</td></tr>';
+    tbody.innerHTML = '<tr><td class="empty-row" colspan="10">No investments found. Add your first investment using the form on the left.</td></tr>';
     countEl.textContent = '';
     return;
   }
@@ -468,6 +538,7 @@ function renderInvestments() {
     const row = document.createElement('tr');
     const gainClass = Number(inv.yield_amount) >= 0 ? 'positive' : 'negative';
     const shortId = inv.investment_id ? inv.investment_id.slice(0, 8) : 'pending';
+    const hasPrice = inv.current_price !== null && inv.current_price !== undefined && inv.current_price !== '—' && !Number.isNaN(Number(inv.current_price));
     row.innerHTML = `
       <td><strong>${inv.identifier || 'Unknown asset'}</strong><div class="hint">${shortId}</div></td>
       <td><span class="tag">${inv.type || 'other'}</span></td>
@@ -477,6 +548,12 @@ function renderInvestments() {
       <td>${formatMoney(inv.total_value)}</td>
       <td class="${gainClass}">${formatMoney(inv.yield_amount)} (${formatPercent(inv.yield_percentage)})</td>
       <td>${formatPercent(inv.allocation_percentage)}</td>
+      <td style="white-space: nowrap;">
+        <button class="fetch-price-btn" data-investment-id="${inv.investment_id}" data-identifier="${inv.identifier || ''}" title="Fetch live price from Yahoo Finance">
+          ${hasPrice ? '↻' : 'Fetch'}
+        </button>
+        <button class="delete-btn" data-investment-id="${inv.investment_id}" data-identifier="${inv.identifier || ''}" title="Delete investment">🗑</button>
+      </td>
     `;
     row.dataset.investmentId = inv.investment_id || '';
     row.dataset.identifier = inv.identifier || '';
@@ -488,6 +565,26 @@ function renderInvestments() {
       row.classList.add('selected');
     }
     tbody.appendChild(row);
+  });
+
+  // Attach click handlers to fetch-price buttons
+  document.querySelectorAll('.fetch-price-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const invId = btn.dataset.investmentId;
+      const identifier = btn.dataset.identifier;
+      if (invId) fetchPrice(invId, identifier);
+    });
+  });
+
+  // Attach click handlers to delete buttons
+  document.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const invId = btn.dataset.investmentId;
+      const identifier = btn.dataset.identifier;
+      if (invId) deleteInvestment(invId, identifier);
+    });
   });
 }
 
@@ -506,6 +603,7 @@ function selectInvestment(inv) {
   document.getElementById('tx-investment-id').value = inv.investment_id;
   document.getElementById('tx-quantity').value = '';
   document.getElementById('tx-amount').value = '';
+  document.getElementById('tx-currency').value = 'USD';
   document.getElementById('tx-broker').value = '';
   document.getElementById('tx-date').value = new Date().toISOString().slice(0, 16);
 
@@ -556,6 +654,94 @@ function initializeEventListeners() {
   document.getElementById('btn-create-investment').addEventListener('click', createInvestment);
   document.getElementById('btn-create-transaction').addEventListener('click', createTransaction);
   document.getElementById('btn-refresh').addEventListener('click', refreshDashboard);
+  document.getElementById('btn-fetch-all-prices').addEventListener('click', fetchAllPrices);
+
+  // Reference currency selector
+  document.getElementById('ref-currency').addEventListener('change', async (event) => {
+    state.referenceCurrency = event.target.value;
+    if (state.userId && state.portfolioId) {
+      setStatus(`Reloading analytics in ${state.referenceCurrency}...`);
+      await loadAnalytics(state.userId, state.portfolioId);
+      await loadInvestments(state.userId, state.portfolioId);
+    }
+  });
+
+  // Ticker validation on input
+  let tickerCheckTimeout = null;
+  const tickerInput = document.getElementById('inv-identifier');
+  const tickerWarning = document.getElementById('ticker-warning');
+  const tickerHint = document.getElementById('ticker-hint');
+  const addInvBtn = document.getElementById('btn-create-investment');
+  const idTypeSelect = document.getElementById('inv-identifier-type');
+
+  function clearTickerWarning() {
+    tickerWarning.classList.add('hidden');
+    tickerWarning.className = 'ticker-warning hidden';
+    tickerWarning.innerHTML = '';
+    addInvBtn.disabled = false;
+    if (tickerHint) tickerHint.classList.remove('hidden');
+  }
+
+  async function checkTicker(value) {
+    if (!value || value.length < 2 || idTypeSelect.value !== 'TICKER') {
+      clearTickerWarning();
+      return;
+    }
+    // If already has a suffix, we still check but with different messaging
+    try {
+      const res = await fetch(`/ticker/check?symbol=${encodeURIComponent(value)}`);
+      const data = await res.json();
+      if (data.exact) {
+        // Ticker is valid and unambiguous
+        tickerWarning.className = 'ticker-warning valid';
+        tickerWarning.innerHTML = `✅ "${value}" is valid.`;
+        tickerWarning.classList.remove('hidden');
+        addInvBtn.disabled = false;
+        if (tickerHint) tickerHint.classList.add('hidden');
+      } else if (data.suggestions && data.suggestions.length > 0) {
+        // Ticker is ambiguous — show suggestions
+        let html = `⚠️ "<strong>${value}</strong>" is ambiguous. Use one of these:<br>`;
+        data.suggestions.slice(0, 6).forEach(s => {
+          const exchange = s.exchange ? `<span class="exchange-tag">${s.exchange}</span>` : '';
+          const name = s.shortName || '';
+          html += `<span class="suggestion-item">• <strong>${s.symbol}</strong> — ${name} ${exchange}</span>`;
+        });
+        tickerWarning.className = 'ticker-warning';
+        tickerWarning.innerHTML = html;
+        tickerWarning.classList.remove('hidden');
+        addInvBtn.disabled = true;
+        if (tickerHint) tickerHint.classList.add('hidden');
+      } else if (data.suggestions && data.suggestions.length === 0 && !data.exact) {
+        // No results at all - show error
+        tickerWarning.className = 'ticker-warning error';
+        tickerWarning.innerHTML = `❌ No exchange listings found for "<strong>${value}</strong>".`;
+        tickerWarning.classList.remove('hidden');
+        addInvBtn.disabled = true;
+        if (tickerHint) tickerHint.classList.add('hidden');
+      } else {
+        clearTickerWarning();
+      }
+    } catch (err) {
+      // Silently fail — don't block the user from adding investments
+      clearTickerWarning();
+    }
+  }
+
+  tickerInput.addEventListener('input', () => {
+    clearTimeout(tickerCheckTimeout);
+    const value = tickerInput.value.trim();
+    if (value.length < 2) {
+      clearTickerWarning();
+      return;
+    }
+    tickerCheckTimeout = setTimeout(() => checkTicker(value), 350);
+  });
+
+  idTypeSelect.addEventListener('change', () => {
+    if (idTypeSelect.value !== 'TICKER') {
+      clearTickerWarning();
+    }
+  });
 
   // Set default date to now
   document.getElementById('tx-date').value = new Date().toISOString().slice(0, 16);

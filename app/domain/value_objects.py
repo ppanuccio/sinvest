@@ -48,7 +48,7 @@ class InvestmentTypeValidator:
 class Identifier:
     """
     Immutable value object representing an investment identifier.
-    Can be either an ISIN (13 alphanumeric chars) or a ticker (1-5 alphanumeric chars).
+    Can be either an ISIN (13 alphanumeric chars) or a ticker (1-10 chars, may include dots for exchange suffixes).
     """
 
     value: str
@@ -86,16 +86,16 @@ class Identifier:
 
     @staticmethod
     def _validate_ticker(identifier: str) -> None:
-        """Validate ticker format: 1-5 alphanumeric characters."""
-        if not (1 <= len(identifier) <= 5):
+        """Validate ticker format: 1-10 characters, alphanumeric with optional dots for exchange suffixes."""
+        if not (1 <= len(identifier) <= 10):
             raise InvalidIdentifierException(
                 identifier,
-                f"Ticker must be 1-5 characters, got {len(identifier)}",
+                f"Ticker must be 1-10 characters, got {len(identifier)}",
             )
-        if not re.match(r"^[A-Z0-9]+$", identifier):
+        if not re.match(r"^[A-Z0-9.]+$", identifier):
             raise InvalidIdentifierException(
                 identifier,
-                "Ticker must be alphanumeric",
+                "Ticker must be alphanumeric (dots allowed for exchange suffixes)",
             )
 
     @staticmethod
@@ -154,6 +154,19 @@ class Money:
         if factor == 0:
             raise InvalidTransactionException("Cannot divide by zero")
         return Money(self.amount / Decimal(str(factor)), self.currency)
+
+    def convert_to(self, currency: str, rate: Decimal) -> "Money":
+        """
+        Convert this Money amount to a different currency using the given rate.
+
+        Args:
+            currency: Target currency code (e.g., "USD", "EUR")
+            rate: Exchange rate (multiply current amount by this to get target amount)
+
+        Returns:
+            New Money instance in the target currency
+        """
+        return Money(self.amount * rate, currency)
 
 
 @dataclass(frozen=True)

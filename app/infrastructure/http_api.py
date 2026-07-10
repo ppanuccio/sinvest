@@ -23,6 +23,11 @@ from app.application.use_cases.user_use_cases import UserUseCases
 from app.application.use_cases.portfolio_analytics_use_cases import (
     PortfolioAnalyticsUseCases,
 )
+from app.application.use_cases.price_history_use_cases import PriceHistoryUseCases
+from app.application.use_cases.fetch_price_use_cases import (
+    FetchPriceUseCases,
+    YahooFinanceError,
+)
 from app.domain.exceptions import (
     AuthenticationFailedException,
     DuplicateUserException,
@@ -39,6 +44,9 @@ from app.infrastructure.file_based_repositories import (
     FileBasedUserRepository,
 )
 from app.infrastructure.security import HMACTokenService, PBKDF2PasswordHasher
+from app.infrastructure.external.yahoo_finance_price_service import (
+    YahooFinancePriceService,
+)
 
 app = FastAPI(title="sinvest HTTP API", version="0.1.0")
 
@@ -72,7 +80,10 @@ authentication_use_cases = AuthenticationUseCases(
 )
 portfolio_use_cases = PortfolioUseCases(portfolio_repository)
 investment_use_cases = InvestmentUseCases(
-    investment_repository, portfolio_repository
+    investment_repository,
+    portfolio_repository,
+    transaction_repository,
+    price_history_repository,
 )
 transaction_use_cases = TransactionUseCases(
     transaction_repository, investment_repository, portfolio_repository
@@ -83,6 +94,18 @@ portfolio_analytics_use_cases = PortfolioAnalyticsUseCases(
     investment_repository,
     transaction_repository,
     price_history_repository,
+)
+
+price_history_use_cases = PriceHistoryUseCases(
+    price_history_repository,
+    investment_repository,
+    portfolio_repository,
+)
+
+fetch_price_use_cases = FetchPriceUseCases(
+    price_history_repository,
+    investment_repository,
+    portfolio_repository,
 )
 
 
@@ -116,6 +139,22 @@ class CreateTransactionRequest(BaseModel):
     quantity: Decimal = Field(..., gt=0)
     broker: str = Field(..., min_length=1, max_length=100)
     date: datetime
+    currency: str = Field(default="USD", pattern="^[A-Z]{3}$")
+
+
+class CreatePriceHistoryRequest(BaseModel):
+    price: Decimal = Field(..., gt=0)
+    date: datetime
+
+
+class PriceHistoryResponseModel(BaseModel):
+    id: str
+    investment_id: str
+    price: Decimal
+    date: datetime
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class UserResponseModel(BaseModel):
@@ -169,6 +208,7 @@ class TransactionResponseModel(BaseModel):
     date: datetime
     created_at: datetime
     updated_at: datetime
+    currency: str = "USD"
 
     model_config = {"from_attributes": True}
 
@@ -233,6 +273,27 @@ async def health_check() -> dict:
     return {"status": "ok"}
 
 
+@app.get("/ticker/check")
+async def check_ticker(symbol: str):
+    """
+    Check if a ticker is ambiguous by searching Yahoo Finance for exchange variants.
+
+    Returns a JSON object with:
+      - exact: True if the bare symbol has price data (unambiguous)
+      - suggestions: list of {symbol, shortName, exchange, typeDisp} for exchange variants
+      - message: human-readable description
+
+    This is a public endpoint (no auth required) used by the UI to validate tickers
+    before the user adds an investment.
+    """
+    svc = YahooFinancePriceService()
+    try:
+        result = await svc.resolve_ticker(symbol.upper().strip())
+        return result
+    except Exception as e:
+        return {"exact": False, "suggestions": [], "message": str(e)}
+
+
 def _encode_value(v):
     if isinstance(v, Decimal):
         return str(v)
@@ -251,10 +312,11 @@ def _encode_value(v):
 async def get_portfolio_analytics(
     user_id: str,
     portfolio_id: str,
+    reference_currency: str = "USD",
     authenticated_user_id: str = Depends(require_route_user),
 ):
-    analytics = portfolio_analytics_use_cases.get_portfolio_analytics(
-        portfolio_id, user_id
+    analytics = await portfolio_analytics_use_cases.get_portfolio_analytics(
+        portfolio_id, user_id, reference_currency
     )
     payload = asdict(analytics)
     return JSONResponse(content=_encode_value(payload))
@@ -346,6 +408,19 @@ async def create_investment(
     return InvestmentResponseModel.model_validate(investment)
 
 
+@app.delete(
+    "/users/{user_id}/investments/{investment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_investment(
+    user_id: str,
+    investment_id: str,
+    authenticated_user_id: str = Depends(require_route_user),
+) -> None:
+    """Delete an investment."""
+    investment_use_cases.delete_investment(investment_id, user_id)
+
+
 @app.get(
     "/users/{user_id}/portfolios/{portfolio_id}/investments",
     response_model=List[InvestmentResponseModel],
@@ -376,6 +451,7 @@ async def create_transaction(
         quantity=request.quantity,
         broker=request.broker,
         date=request.date,
+        currency=request.currency,
     )
     transaction = transaction_use_cases.create_transaction(user_id, dto)
     return TransactionResponseModel.model_validate(transaction)
@@ -392,3 +468,144 @@ async def list_transactions(
 ) -> List[TransactionResponseModel]:
     transactions = transaction_use_cases.list_transactions(investment_id, user_id)
     return [TransactionResponseModel.model_validate(transaction) for transaction in transactions]
+
+
+@app.post(
+    "/users/{user_id}/investments/{investment_id}/prices",
+    response_model=PriceHistoryResponseModel,
+    status_code=status.HTTP_201_CREATED,
+)
+async def record_price(
+    user_id: str,
+    investment_id: str,
+    request: CreatePriceHistoryRequest,
+    authenticated_user_id: str = Depends(require_route_user),
+) -> PriceHistoryResponseModel:
+    from app.application.dto.price_history_dto import CreatePriceHistoryDTO
+
+    dto = CreatePriceHistoryDTO(
+        investment_id=investment_id,
+        price=request.price,
+        date=request.date,
+    )
+    price_history = price_history_use_cases.record_price(user_id, dto)
+    return PriceHistoryResponseModel.model_validate(price_history)
+
+
+@app.get(
+    "/users/{user_id}/investments/{investment_id}/prices/latest",
+    response_model=PriceHistoryResponseModel,
+)
+async def get_latest_price(
+    user_id: str,
+    investment_id: str,
+    authenticated_user_id: str = Depends(require_route_user),
+) -> PriceHistoryResponseModel:
+    price_history = price_history_use_cases.get_latest_price(investment_id, user_id)
+    if not price_history:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No price history found for this investment",
+        )
+    return PriceHistoryResponseModel.model_validate(price_history)
+
+
+@app.get(
+    "/users/{user_id}/investments/{investment_id}/prices",
+    response_model=List[PriceHistoryResponseModel],
+)
+async def list_prices(
+    user_id: str,
+    investment_id: str,
+    authenticated_user_id: str = Depends(require_route_user),
+) -> List[PriceHistoryResponseModel]:
+    prices = price_history_use_cases.list_prices(investment_id, user_id)
+    return [PriceHistoryResponseModel.model_validate(p) for p in prices]
+
+
+@app.get(
+    "/users/{user_id}/investments/{investment_id}/prices/range",
+    response_model=List[PriceHistoryResponseModel],
+)
+async def list_prices_by_date_range(
+    user_id: str,
+    investment_id: str,
+    from_date: datetime,
+    to_date: datetime,
+    authenticated_user_id: str = Depends(require_route_user),
+) -> List[PriceHistoryResponseModel]:
+    prices = price_history_use_cases.list_prices_by_date_range(
+        investment_id, user_id, from_date, to_date
+    )
+    return [PriceHistoryResponseModel.model_validate(p) for p in prices]
+
+
+@app.post(
+    "/users/{user_id}/investments/{investment_id}/prices/fetch",
+    response_model=PriceHistoryResponseModel,
+    status_code=status.HTTP_201_CREATED,
+)
+async def fetch_and_store_current_price(
+    user_id: str,
+    investment_id: str,
+    authenticated_user_id: str = Depends(require_route_user),
+) -> PriceHistoryResponseModel:
+    """
+    Fetch current price from Yahoo Finance and store it in price history.
+
+    This endpoint:
+    1. Verifies the investment exists and belongs to the user
+    2. Fetches the current market price from Yahoo Finance
+    3. Stores the price in the price history
+    4. Returns the stored price record
+
+    Note: Currently only supports investments with TICKER identifier type.
+    ISIN identifiers are not directly supported by Yahoo Finance API.
+    """
+    try:
+        price_history = await fetch_price_use_cases.fetch_and_store_current_price(
+            user_id, investment_id
+        )
+        return PriceHistoryResponseModel.model_validate(price_history)
+    except YahooFinanceError as e:
+        detail = f"Failed to fetch price from Yahoo Finance: {e}"
+        # Add a hint for European tickers that need an exchange suffix
+        if "No price data" in str(e) or "no data" in str(e).lower():
+            detail += " For European ETFs/stocks, try adding an exchange suffix (.DE, .MI, .AS, .L, .PA, .SW)."
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=detail,
+        )
+
+
+@app.post(
+    "/users/{user_id}/investments/prices/fetch-batch",
+    response_model=List[PriceHistoryResponseModel],
+    status_code=status.HTTP_201_CREATED,
+)
+async def fetch_and_store_multiple_prices(
+    user_id: str,
+    investment_ids: List[str],
+    authenticated_user_id: str = Depends(require_route_user),
+) -> List[PriceHistoryResponseModel]:
+    """
+    Fetch current prices for multiple investments from Yahoo Finance and store them.
+
+    This endpoint:
+    1. Verifies all investments exist and belong to the user
+    2. Fetches current market prices from Yahoo Finance in batch
+    3. Stores the prices in the price history
+    4. Returns the stored price records
+
+    Note: Only investments with TICKER identifier type are supported.
+    """
+    try:
+        price_histories = await fetch_price_use_cases.fetch_and_store_multiple_prices(
+            user_id, investment_ids
+        )
+        return [PriceHistoryResponseModel.model_validate(p) for p in price_histories]
+    except YahooFinanceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to fetch prices from Yahoo Finance: {e}",
+        )

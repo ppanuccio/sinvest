@@ -48,39 +48,63 @@ class InvestmentCalculationService:
         return sorted_tx[0].amount
 
     @staticmethod
+    def _convert_amount(
+        amount: Money, reference_currency: str, rates: dict[str, Decimal]
+    ) -> Money:
+        """Convert a Money amount to the reference currency using provided rates."""
+        if amount.currency == reference_currency:
+            return amount
+        rate = rates.get(amount.currency)
+        if rate is None:
+            raise InvalidInvestmentException(
+                f"No exchange rate found for {amount.currency}→{reference_currency}"
+            )
+        return amount.convert_to(reference_currency, rate)
+
+    @staticmethod
     def calculate_total_invested_amount(
         transactions: List[Transaction],
+        reference_currency: str = "USD",
+        rates: dict[str, Decimal] | None = None,
     ) -> Money:
-        """Calculate total amount invested (sum of all transaction amounts)."""
+        """
+        Calculate total amount invested (sum of all transaction amounts).
+        All amounts are converted to reference_currency using the provided rates.
+        """
         if not transactions:
             return Money(Decimal("0"))
 
+        if rates is None:
+            rates = {}
+
         total = Decimal("0")
-        currency = transactions[0].amount.currency
 
         for transaction in transactions:
-            if transaction.amount.currency != currency:
-                raise InvalidInvestmentException(
-                    f"Mixed currencies: {currency} and {transaction.amount.currency}"
-                )
-            total += transaction.amount.amount
+            converted = InvestmentCalculationService._convert_amount(
+                transaction.amount, reference_currency, rates
+            )
+            total += converted.amount
 
-        return Money(total, currency)
+        return Money(total, reference_currency)
 
     @staticmethod
     def calculate_total_value(
         transactions: List[Transaction],
         current_price: Money,
+        reference_currency: str = "USD",
+        rates: dict[str, Decimal] | None = None,
     ) -> Money:
         """
         Calculate current total value of the investment.
         Formula: (current_price × total_quantity) - sum(transaction_amounts)
 
-        This accounts for reinvestment scenarios - if you sell portion at profit,
-        the total value accurately reflects that.
+        All amounts are converted to reference_currency using the provided rates.
         """
         if not transactions:
             return Money(Decimal("0"))
+
+        if rates is None:
+            rates = {}
 
         try:
             total_qty = InvestmentCalculationService.calculate_total_quantity(
@@ -88,19 +112,17 @@ class InvestmentCalculationService:
             )
             total_invested = (
                 InvestmentCalculationService.calculate_total_invested_amount(
-                    transactions
+                    transactions, reference_currency, rates
                 )
             )
 
-            # Verify currencies match
-            if current_price.currency != total_invested.currency:
-                raise InvalidInvestmentException(
-                    f"Currency mismatch: price is {current_price.currency}, "
-                    f"transactions are {total_invested.currency}"
-                )
+            # Convert current price to reference currency
+            converted_price = InvestmentCalculationService._convert_amount(
+                current_price, reference_currency, rates
+            )
 
             # Calculate: (price × quantity) - sum(amounts)
-            current_value = current_price * total_qty
+            current_value = converted_price * total_qty
             net_value = current_value - total_invested
 
             return net_value

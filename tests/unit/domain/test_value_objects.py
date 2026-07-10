@@ -44,9 +44,9 @@ class TestIdentifier:
             Identifier.create_isin("INVALID1234567")
 
     def test_ticker_too_long(self):
-        """Test ticker validation rejects long identifiers."""
+        """Test ticker validation rejects overly long identifiers."""
         with pytest.raises(InvalidIdentifierException):
-            Identifier.create_ticker("TOOLONG")
+            Identifier.create_ticker("TOOLONG1234")
 
     def test_ticker_with_invalid_chars(self):
         """Test ticker validation rejects non-alphanumeric."""
