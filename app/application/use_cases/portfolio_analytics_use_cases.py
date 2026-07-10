@@ -60,7 +60,10 @@ class PortfolioAnalyticsUseCases:
                     rate = await svc.get_exchange_rate(currency, reference_currency)
                     rates[currency] = rate
                 except YahooFinanceError:
-                    pass
+                    raise YahooFinanceError(
+                        f"Could not fetch exchange rate for {currency}→{reference_currency}. "
+                        "VALUE and GAIN cannot be calculated for investments in this currency."
+                    )
         return rates
 
     async def get_portfolio_analytics(
@@ -178,13 +181,24 @@ class PortfolioAnalyticsUseCases:
                     if transactions
                     else None
                 )
-                initial_amount = (
+                # Convert initial amount to reference currency so it matches
+                # the currency of total_value (both must be in the same currency
+                # for yield calculation to work).
+                raw_initial = (
                     InvestmentCalculationService.calculate_initial_amount(
                         transactions
                     )
                     if transactions
                     else None
                 )
+                if raw_initial is not None and raw_initial.currency != reference_currency:
+                    rate = rates.get(raw_initial.currency)
+                    if rate is not None:
+                        initial_amount = raw_initial.convert_to(reference_currency, rate)
+                    else:
+                        initial_amount = raw_initial
+                else:
+                    initial_amount = raw_initial
 
                 # Calculate total value
                 if prices and transactions:
@@ -201,7 +215,7 @@ class PortfolioAnalyticsUseCases:
                     inv_total_value = total_invested_inv or None
                     inv_yield = None
                     inv_yield_pct = None
-            except Exception:
+            except Exception as e:
                 inv_total_value = None
                 inv_yield = None
                 inv_yield_pct = None

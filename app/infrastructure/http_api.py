@@ -315,11 +315,17 @@ async def get_portfolio_analytics(
     reference_currency: str = "USD",
     authenticated_user_id: str = Depends(require_route_user),
 ):
-    analytics = await portfolio_analytics_use_cases.get_portfolio_analytics(
-        portfolio_id, user_id, reference_currency
-    )
-    payload = asdict(analytics)
-    return JSONResponse(content=_encode_value(payload))
+    try:
+        analytics = await portfolio_analytics_use_cases.get_portfolio_analytics(
+            portfolio_id, user_id, reference_currency
+        )
+        payload = asdict(analytics)
+        return JSONResponse(content=_encode_value(payload))
+    except YahooFinanceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        )
 
 
 @app.post("/users", response_model=UserResponseModel, status_code=status.HTTP_201_CREATED)
