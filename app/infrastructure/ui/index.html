@@ -491,30 +491,28 @@
                     <input id="tx-quantity" type="number" step="0.000001" placeholder="e.g., 10" />
                   </div>
                   <div class="form-group">
-                    <label for="tx-amount">Amount</label>
-                    <div style="display: flex; gap: 8px;">
-                      <input id="tx-amount" type="number" step="0.01" placeholder="e.g., 1500.00" style="flex: 1;" />
-                      <select id="tx-currency" style="width: auto; min-width: 85px; min-height: 42px;">
-                        <option value="USD" selected>USD</option>
-                        <option value="EUR">EUR</option>
-                        <option value="GBP">GBP</option>
-                        <option value="CHF">CHF</option>
-                        <option value="JPY">JPY</option>
-                        <option value="CAD">CAD</option>
-                        <option value="AUD">AUD</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-                <div class="tx-form-row">
-                  <div class="form-group">
                     <label for="tx-broker">Broker</label>
                     <input id="tx-broker" placeholder="e.g., Interactive Brokers, Robinhood" />
                   </div>
-                  <div class="form-group">
-                    <label for="tx-date">Date & Time</label>
-                    <input id="tx-date" type="datetime-local" />
+                </div>
+                <div class="form-group">
+                  <label for="tx-amount">Amount</label>
+                  <div style="display: flex; gap: 8px;">
+                    <input id="tx-amount" type="number" step="0.01" placeholder="e.g., 1500.00" style="flex: 1;" />
+                    <select id="tx-currency" style="width: auto; min-width: 85px; min-height: 42px;">
+                      <option value="USD" selected>USD</option>
+                      <option value="EUR">EUR</option>
+                      <option value="GBP">GBP</option>
+                      <option value="CHF">CHF</option>
+                      <option value="JPY">JPY</option>
+                      <option value="CAD">CAD</option>
+                      <option value="AUD">AUD</option>
+                    </select>
                   </div>
+                </div>
+                <div class="form-group" style="margin-top: 10px;">
+                  <label for="tx-date">Date & Time</label>
+                  <input id="tx-date" type="datetime-local" />
                 </div>
                 <button id="btn-create-transaction" style="width: 100%;">Add Transaction</button>
               </div>
