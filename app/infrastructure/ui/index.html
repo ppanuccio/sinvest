@@ -44,6 +44,23 @@
     }
     .topbar h1 { margin: 0; font-size: clamp(1.7rem, 3vw, 2.45rem); line-height: 1.05; letter-spacing: 0; }
     .topbar p { margin: 8px 0 0; color: var(--muted); max-width: 760px; line-height: 1.55; }
+    .topbar-right {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .auth-widget {
+      width: 300px;
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+    .auth-widget .auth-form { display: grid; gap: 10px; margin: 0; }
+    .auth-widget-title { font-size: 0.95rem; font-weight: 700; color: var(--text); margin-bottom: 2px; }
     .dashboard { display: grid; grid-template-columns: minmax(320px, 390px) minmax(0, 1fr); gap: 18px; align-items: start; }
     .panel {
       background: rgba(255, 255, 255, 0.94);
@@ -349,28 +366,13 @@
         <h1>sinvest Portfolio Dashboard</h1>
         <p>Track investments, add transactions, and monitor portfolio performance in one place.</p>
       </div>
-      <div>
+      <div class="topbar-right">
         <button id="btn-refresh" class="small-button">Refresh Data</button>
-      </div>
-    </div>
 
-    <div id="status-message" class="status-message">Welcome! Sign in or create an account to get started.</div>
-
-    <div class="dashboard">
-      <!-- Left Panel: Streamlined Controls -->
-      <div class="panel controls-panel">
-        <!-- Step Indicator -->
-        <div class="step-indicator" id="step-indicator">
-          <div class="step" data-step="1">1. Account</div>
-          <div class="step" data-step="2">2. Portfolio</div>
-          <div class="step" data-step="3">3. Investments</div>
-          <div class="step" data-step="4">4. Transactions</div>
-        </div>
-
-        <!-- Account Section -->
-        <div class="action-card" id="account-section">
-          <div class="section-heading"><h2>Account</h2></div>
+        <!-- Auth widget (upper-right) -->
+        <div class="auth-widget">
           <div class="auth-form" id="auth-form">
+            <div class="auth-widget-title">Create Account</div>
             <div class="form-group">
               <label for="user-username">Username</label>
               <input id="user-username" placeholder="Create a username" autocomplete="username" />
@@ -389,7 +391,9 @@
             </div>
             <pre id="out-create-user"></pre>
           </div>
+
           <div class="auth-form hidden" id="login-form">
+            <div class="auth-widget-title">Sign In</div>
             <div class="form-group">
               <label for="login-username">Username</label>
               <input id="login-username" placeholder="Your username" autocomplete="username" />
@@ -404,11 +408,27 @@
             </div>
             <pre id="out-login"></pre>
           </div>
+
           <div id="auth-state" class="hint hidden">Signed in. Loading portfolios...</div>
           <div id="user-info" class="hidden">
             <div class="hint">Signed in as <strong id="display-username"></strong></div>
             <button id="btn-logout" class="small-button" style="margin-top: 8px;">Sign Out</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="status-message" class="status-message">Welcome! Sign in or create an account to get started.</div>
+
+    <div class="dashboard">
+      <!-- Left Panel: Streamlined Controls -->
+      <div class="panel controls-panel">
+        <!-- Step Indicator -->
+        <div class="step-indicator" id="step-indicator">
+          <div class="step" data-step="1">1. Account</div>
+          <div class="step" data-step="2">2. Portfolio</div>
+          <div class="step" data-step="3">3. Investments</div>
+          <div class="step" data-step="4">4. Transactions</div>
         </div>
 
         <!-- Portfolio Section -->
