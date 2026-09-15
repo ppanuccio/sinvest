@@ -16,13 +16,24 @@ class InvestmentCalculationService:
     """
 
     @staticmethod
+    def _is_coupon(transaction: Transaction) -> bool:
+        """Return True when the transaction is a coupon receipt (not a buy)."""
+        # Defensive: entities created before the `kind` field existed carry no
+        # attribute; defaulting to "buy" preserves their behaviour.
+        return getattr(transaction, "kind", "buy") == "coupon"
+
+    @staticmethod
     def calculate_total_quantity(transactions: List[Transaction]) -> Decimal:
         """
-        Calculate total quantity across all transactions.
+        Calculate total quantity across all BUY transactions.
+        Coupon transactions carry a quantity (the holding) but must NOT be
+        summed into total quantity — they represent income, not acquisition.
         Returns 0 if no transactions.
         """
         total = Decimal("0")
         for transaction in transactions:
+            if InvestmentCalculationService._is_coupon(transaction):
+                continue
             total += transaction.quantity.value
 
         if total < 0:
@@ -37,14 +48,25 @@ class InvestmentCalculationService:
         transactions: List[Transaction],
     ) -> Optional[Money]:
         """
-        Get the initial amount from the first transaction (by date).
-        Returns None if no transactions.
+        Get the initial amount from the first BUY transaction (by date).
+        Coupon transactions are income, not acquisition, so they never form
+        the capital basis. Returns None if there are no transactions at all
+        or no BUY transactions.
         """
         if not transactions:
             return None
 
-        # Sort by date to find first transaction
-        sorted_tx = sorted(transactions, key=lambda t: t.date)
+        # Coupons are income — exclude them from the capital basis.
+        buys = [
+            t
+            for t in transactions
+            if not InvestmentCalculationService._is_coupon(t)
+        ]
+        if not buys:
+            return None
+
+        # Sort by date to find the first BUY
+        sorted_tx = sorted(buys, key=lambda t: t.date)
         return sorted_tx[0].amount
 
     @staticmethod
@@ -68,8 +90,10 @@ class InvestmentCalculationService:
         rates: dict[str, Decimal] | None = None,
     ) -> Money:
         """
-        Calculate total amount invested (sum of all transaction amounts).
-        All amounts are converted to reference_currency using the provided rates.
+        Calculate total amount invested (sum of BUY transaction amounts).
+        Coupon transactions are EXCLUDED: they represent income received, not
+        capital paid in. All amounts are converted to reference_currency using
+        the provided rates.
         """
         if not transactions:
             return Money(Decimal("0"))
@@ -80,6 +104,8 @@ class InvestmentCalculationService:
         total = Decimal("0")
 
         for transaction in transactions:
+            if InvestmentCalculationService._is_coupon(transaction):
+                continue
             converted = InvestmentCalculationService._convert_amount(
                 transaction.amount, reference_currency, rates
             )
@@ -172,12 +198,83 @@ class InvestmentCalculationService:
         return percentage
 
     @staticmethod
+    def calculate_total_coupon_income(
+        transactions: List[Transaction],
+        reference_currency: str = "USD",
+        rates: dict[str, Decimal] | None = None,
+    ) -> Money:
+        """
+        Sum the amount of all COUPON transactions (income received).
+        All amounts are converted to reference_currency using the provided rates.
+        Returns Money(Decimal("0")) when there are no coupons.
+        """
+        if rates is None:
+            rates = {}
+
+        total = Decimal("0")
+        for transaction in transactions:
+            if not InvestmentCalculationService._is_coupon(transaction):
+                continue
+            converted = InvestmentCalculationService._convert_amount(
+                transaction.amount, reference_currency, rates
+            )
+            total += converted.amount
+
+        return Money(total, reference_currency)
+
+    @staticmethod
+    def calculate_total_value_bond(
+        transactions: List[Transaction],
+        face_value: Money,
+        reference_currency: str = "USD",
+        rates: dict[str, Decimal] | None = None,
+    ) -> Money:
+        """
+        Compute total value / yield for a held-to-maturity bond.
+
+        Formula: (face_value_per_unit x buy_quantity) - total_invested + coupons
+        i.e. redemption value (face value basis) minus what was paid in, plus
+        all coupon income received.
+
+        Unlike calculate_total_value, this does NOT depend on a live market
+        price — the bond redeems at its face value.
+
+        All amounts are converted to reference_currency using the provided rates.
+        """
+        if not transactions:
+            return Money(Decimal("0"))
+
+        if rates is None:
+            rates = {}
+
+        buy_quantity = InvestmentCalculationService.calculate_total_quantity(
+            transactions
+        )
+        # face_value is per-unit; redemption = face_value * quantity (face currency)
+        redemption = face_value * buy_quantity
+        redemption_ref = InvestmentCalculationService._convert_amount(
+            redemption, reference_currency, rates
+        )
+        invested_ref = (
+            InvestmentCalculationService.calculate_total_invested_amount(
+                transactions, reference_currency, rates
+            )
+        )
+        coupons_ref = InvestmentCalculationService.calculate_total_coupon_income(
+            transactions, reference_currency, rates
+        )
+
+        return Money(redemption_ref.amount - invested_ref.amount + coupons_ref.amount, reference_currency)
+
+    @staticmethod
     def get_price_per_unit(
         transactions: List[Transaction],
     ) -> Optional[Decimal]:
         """
-        Get the weighted average price per unit across all transactions.
-        If multiple transactions at different prices, calculates weighted average.
+        Get the weighted average price per unit across all BUY transactions.
+        Coupon transactions are income received, not purchase cost, so they
+        are excluded. If multiple transactions at different prices, calculates
+        weighted average.
         """
         if not transactions:
             return None
@@ -186,6 +283,8 @@ class InvestmentCalculationService:
         total_qty = Decimal("0")
 
         for transaction in transactions:
+            if InvestmentCalculationService._is_coupon(transaction):
+                continue
             total_cost += transaction.amount.amount
             total_qty += transaction.quantity.value
 

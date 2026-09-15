@@ -113,6 +113,48 @@ class TestInvestmentEntity:
         assert investment.identifier.value == "US0378331005"
         assert investment.type == InvestmentType.STOCK
 
+    def test_create_bond_investment_held_to_maturity(self):
+        """Test creating a held-to-maturity bond investment with face value."""
+        identifier = Identifier.create_isin("US0378331005")
+        investment = Investment(
+            id="inv-123",
+            portfolio_id="port-123",
+            identifier=identifier,
+            type=InvestmentType.BOND,
+            held_to_maturity=True,
+            face_value=Money(Decimal("100"), "USD"),
+            created_at=datetime.utcnow(),
+        )
+        assert investment.held_to_maturity is True
+        assert investment.face_value.amount == Decimal("100")
+        assert investment.face_value.currency == "USD"
+
+    def test_investment_defaults(self):
+        """Test that a plain investment lacks bond metadata."""
+        identifier = Identifier.create_ticker("AAPL")
+        investment = Investment(
+            id="inv-123",
+            portfolio_id="port-123",
+            identifier=identifier,
+            type=InvestmentType.STOCK,
+            created_at=datetime.utcnow(),
+        )
+        assert investment.held_to_maturity is False
+        assert investment.face_value is None
+
+    def test_invalid_held_to_maturity_rejected(self):
+        """Test that non-bool held_to_maturity is rejected."""
+        identifier = Identifier.create_isin("US0378331005")
+        with pytest.raises(ValueError):
+            Investment(
+                id="inv-123",
+                portfolio_id="port-123",
+                identifier=identifier,
+                type=InvestmentType.BOND,
+                held_to_maturity="yes",
+                created_at=datetime.utcnow(),
+            )
+
     def test_update_investment_type(self):
         """Test updating investment type."""
         identifier = Identifier.create_ticker("AAPL")
@@ -172,6 +214,50 @@ class TestTransactionEntity:
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow(),
             )
+
+    def test_create_coupon_transaction_kind(self):
+        """Test creating a coupon transaction."""
+        transaction = Transaction(
+            id="tx-123",
+            investment_id="inv-123",
+            amount=Money(Decimal("15"), "USD"),
+            quantity=Quantity(Decimal("1")),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+            kind="coupon",
+        )
+        assert transaction.kind == "coupon"
+
+    def test_invalid_kind_rejected(self):
+        """Test that an invalid transaction kind is rejected."""
+        with pytest.raises(ValueError):
+            Transaction(
+                id="tx-123",
+                investment_id="inv-123",
+                amount=Money(Decimal("15"), "USD"),
+                quantity=Quantity(Decimal("1")),
+                broker="Broker",
+                date=datetime.utcnow() - timedelta(days=1),
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+                kind="invalid_kind",
+            )
+
+    def test_transaction_default_kind_is_buy(self):
+        """Test a transaction defaults to kind=buy."""
+        transaction = Transaction(
+            id="tx-123",
+            investment_id="inv-123",
+            amount=Money(Decimal("1000"), "USD"),
+            quantity=Quantity(Decimal("10")),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        assert transaction.kind == "buy"
 
     def test_update_transaction(self):
         """Test updating transaction details."""

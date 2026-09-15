@@ -4,7 +4,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
-from app.domain.value_objects import Identifier, InvestmentType, InvestmentTypeValidator
+from app.domain.value_objects import (
+    Identifier,
+    InvestmentType,
+    InvestmentTypeValidator,
+    Money,
+)
 
 
 @dataclass
@@ -21,6 +26,8 @@ class Investment:
     type: InvestmentType
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
+    held_to_maturity: bool = False  # Bonds held until redemption
+    face_value: Optional[Money] = None  # Per-unit nominal value (for bonds)
 
     def __post_init__(self):
         """Validate investment data after initialization."""
@@ -30,10 +37,18 @@ class Investment:
             raise ValueError("identifier must be an Identifier value object")
         if not isinstance(self.type, InvestmentType):
             raise ValueError("type must be an InvestmentType")
+        if not isinstance(self.held_to_maturity, bool):
+            raise ValueError("held_to_maturity must be a bool")
+        if self.face_value is not None and not isinstance(
+            self.face_value, Money
+        ):
+            raise ValueError("face_value must be a Money value object")
 
     def update_details(
         self,
         type: Optional[InvestmentType] = None,
+        held_to_maturity: Optional[bool] = None,
+        face_value: Optional[Money] = None,
         updated_at: Optional[datetime] = None,
     ) -> None:
         """Update investment metadata (limited fields to preserve identifier)."""
@@ -41,6 +56,16 @@ class Investment:
             if not isinstance(type, InvestmentType):
                 raise ValueError("type must be an InvestmentType")
             object.__setattr__(self, "type", type)
+
+        if held_to_maturity is not None:
+            if not isinstance(held_to_maturity, bool):
+                raise ValueError("held_to_maturity must be a bool")
+            object.__setattr__(self, "held_to_maturity", held_to_maturity)
+
+        if face_value is not None:
+            if not isinstance(face_value, Money):
+                raise ValueError("face_value must be a Money value object")
+            object.__setattr__(self, "face_value", face_value)
 
         object.__setattr__(
             self, "updated_at", updated_at or datetime.utcnow()

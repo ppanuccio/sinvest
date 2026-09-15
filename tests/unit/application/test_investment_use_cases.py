@@ -2,6 +2,7 @@
 
 import pytest
 from datetime import datetime
+from decimal import Decimal
 
 from app.application.use_cases.investment_use_cases import InvestmentUseCases
 from app.application.use_cases.portfolio_use_cases import PortfolioUseCases
@@ -16,6 +17,7 @@ from app.domain.exceptions import (
     EntityNotFoundException,
     UnauthorizedException,
     InvalidIdentifierException,
+    InvalidInvestmentException,
 )
 from tests.infrastructure.in_memory_repositories import (
     InMemoryInvestmentRepository,
@@ -138,6 +140,74 @@ class TestInvestmentUseCases:
         )
         with pytest.raises(Exception):  # InvalidInvestmentException
             investment_use_cases.create_investment(user_id, dto)
+
+    def test_create_bond_with_face_value(self, investment_use_cases, setup_user_and_portfolio):
+        """Test creating a held-to-maturity bond with face value."""
+        user_id, portfolio_id = setup_user_and_portfolio
+
+        dto = CreateInvestmentDTO(
+            portfolio_id=portfolio_id,
+            identifier="IT0000000001",
+            identifier_type="ISIN",
+            type="bond",
+            held_to_maturity=True,
+            face_value=Decimal("100"),
+            face_value_currency="USD",
+        )
+        result = investment_use_cases.create_investment(user_id, dto)
+
+        assert result.held_to_maturity is True
+        assert result.face_value == Decimal("100")
+        assert result.face_value_currency == "USD"
+
+    def test_create_bond_htm_without_face_value_rejected(
+        self, investment_use_cases, setup_user_and_portfolio
+    ):
+        """A held-to-maturity bond without a face value is invalid."""
+        user_id, portfolio_id = setup_user_and_portfolio
+
+        dto = CreateInvestmentDTO(
+            portfolio_id=portfolio_id,
+            identifier="IT0000000002",
+            identifier_type="ISIN",
+            type="bond",
+            held_to_maturity=True,
+        )
+        with pytest.raises(InvalidInvestmentException):
+            investment_use_cases.create_investment(user_id, dto)
+
+    def test_update_investment_htm_requires_face_value(
+        self, investment_use_cases, setup_user_and_portfolio
+    ):
+        """Updating an investment to held-to-maturity needs a face value."""
+        user_id, portfolio_id = setup_user_and_portfolio
+
+        create_dto = CreateInvestmentDTO(
+            portfolio_id=portfolio_id,
+            identifier="IT0000000003",
+            identifier_type="ISIN",
+            type="bond",
+        )
+        created = investment_use_cases.create_investment(user_id, create_dto)
+
+        update_dto = UpdateInvestmentDTO(held_to_maturity=True)
+        with pytest.raises(InvalidInvestmentException):
+            investment_use_cases.update_investment(
+                created.id, user_id, update_dto
+            )
+
+        # With a face value the same update succeeds.
+        update_dto = UpdateInvestmentDTO(
+            held_to_maturity=True,
+            face_value=Decimal("100"),
+            face_value_currency="USD",
+        )
+        updated = investment_use_cases.update_investment(
+            created.id, user_id, update_dto
+        )
+        assert updated.held_to_maturity is True
+        assert updated.face_value == Decimal("100")
+        assert updated.face_value_currency == "USD"
 
     def test_get_investment_success(
         self, investment_use_cases, setup_user_and_portfolio

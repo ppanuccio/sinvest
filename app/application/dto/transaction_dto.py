@@ -18,6 +18,7 @@ class CreateTransactionDTO:
     broker: str
     date: datetime
     currency: str = "USD"
+    kind: str = "buy"
 
 
 @dataclass
@@ -29,6 +30,7 @@ class UpdateTransactionDTO:
     broker: Optional[str] = None
     date: Optional[datetime] = None
     currency: Optional[str] = None
+    kind: Optional[str] = None
 
 
 @dataclass
@@ -62,6 +64,7 @@ class TransactionResponseDTO:
     created_at: datetime
     updated_at: datetime
     currency: str = "USD"
+    kind: str = "buy"
 
     class Config:
         from_attributes = True

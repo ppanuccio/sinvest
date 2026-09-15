@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from typing import List
 
 from app.domain.entities.investment import Investment
@@ -11,7 +12,7 @@ from app.domain.repositories.transaction_repository import TransactionRepository
 from app.domain.repositories.price_history_repository import (
     PriceHistoryRepository,
 )
-from app.domain.value_objects import Identifier, InvestmentType
+from app.domain.value_objects import Identifier, InvestmentType, Money
 from app.domain.services.validation_service import ValidationService
 from app.domain.exceptions import (
     EntityNotFoundException,
@@ -71,6 +72,23 @@ class InvestmentUseCases:
             dto.type
         )
 
+        # Build face value (bond nominal per unit) as a Money value object.
+        # Explicit currency avoids the Money default-currency ("EUR") gotcha.
+        face_value = None
+        if dto.face_value is not None:
+            if dto.face_value <= 0:
+                raise InvalidInvestmentException("face_value must be positive")
+            face_value = Money(
+                Decimal(str(dto.face_value)), dto.face_value_currency or "USD"
+            )
+
+        # A held-to-maturity bond is valued on its face value basis; without a
+        # face value it would silently degrade to the market-price path.
+        if dto.held_to_maturity and face_value is None:
+            raise InvalidInvestmentException(
+                "held_to_maturity requires a face_value"
+            )
+
         # Create investment entity
         investment = Investment(
             id=str(uuid.uuid4()),
@@ -78,6 +96,8 @@ class InvestmentUseCases:
             identifier=identifier,
             type=investment_type,
             created_at=datetime.utcnow(),
+            held_to_maturity=dto.held_to_maturity,
+            face_value=face_value,
         )
 
         # Save and return
@@ -140,12 +160,42 @@ class InvestmentUseCases:
             )
 
         # Validate input if provided
-        if dto.type:
-            investment_type = self.validation_service.validate_investment_type(
-                dto.type
+        face_value = None
+        if dto.face_value is not None:
+            if dto.face_value <= 0:
+                raise InvalidInvestmentException("face_value must be positive")
+            currency = dto.face_value_currency or "USD"
+            face_value = Money(Decimal(str(dto.face_value)), currency)
+
+        # A held-to-maturity bond must keep a face value: enforce the invariant
+        # on the effective post-update state.
+        effective_htm = (
+            dto.held_to_maturity
+            if dto.held_to_maturity is not None
+            else investment.held_to_maturity
+        )
+        effective_face = (
+            face_value if face_value is not None else investment.face_value
+        )
+        if effective_htm and effective_face is None:
+            raise InvalidInvestmentException(
+                "held_to_maturity requires a face_value"
             )
+
+        if any(
+            value is not None
+            for value in (dto.type, dto.held_to_maturity, dto.face_value)
+        ):
+            investment_type = None
+            if dto.type:
+                investment_type = self.validation_service.validate_investment_type(
+                    dto.type
+                )
             investment.update_details(
-                type=investment_type, updated_at=datetime.utcnow()
+                type=investment_type,
+                held_to_maturity=dto.held_to_maturity,
+                face_value=face_value,
+                updated_at=datetime.utcnow(),
             )
             updated = self.investment_repository.update(investment)
             return self._to_response_dto(updated)
@@ -186,4 +236,15 @@ class InvestmentUseCases:
             type=investment.type.value,
             created_at=investment.created_at,
             updated_at=investment.updated_at,
+            held_to_maturity=investment.held_to_maturity,
+            face_value=(
+                investment.face_value.amount
+                if investment.face_value is not None
+                else None
+            ),
+            face_value_currency=(
+                investment.face_value.currency
+                if investment.face_value is not None
+                else "USD"
+            ),
         )

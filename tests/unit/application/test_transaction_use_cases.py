@@ -104,6 +104,22 @@ class TestTransactionUseCases:
         assert result.quantity == Decimal("10")
         assert result.broker == "Interactive Brokers"
 
+    def test_create_coupon_transaction_uses_fixture(self, use_cases, setup_user_portfolio_investment):
+        """Test creating a coupon transaction using the standard fixtures."""
+        user_id, portfolio_id, investment_id = setup_user_portfolio_investment
+
+        dto = CreateTransactionDTO(
+            investment_id=investment_id,
+            amount=Decimal("15"),
+            quantity=Decimal("1"),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=1),
+            kind="coupon",
+        )
+        result = use_cases["transaction"].create_transaction(user_id, dto)
+
+        assert result.kind == "coupon"
+
     def test_create_transaction_invalid_amount(
         self, use_cases, setup_user_portfolio_investment
     ):

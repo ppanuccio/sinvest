@@ -119,6 +119,8 @@ class PortfolioAnalyticsUseCases:
                 all_currencies.add(tx.amount.currency)
             if prices:
                 all_currencies.add(prices[0].price.currency)
+            if investment.face_value:
+                all_currencies.add(investment.face_value.currency)
 
         # Fetch exchange rates for all currencies to the reference currency
         rates = await self._fetch_rates(all_currencies, reference_currency)
@@ -200,11 +202,29 @@ class PortfolioAnalyticsUseCases:
                 else:
                     initial_amount = raw_initial
 
-                # Calculate total value
-                if prices and transactions:
-                    inv_total_value = InvestmentCalculationService.calculate_total_value(
-                        transactions, prices[0].price, reference_currency, rates
-                    )
+                # Calculate total value. A held-to-maturity bond is valued on
+                # its face value basis even when there is no live market price.
+                is_bond_htm = (
+                    investment.held_to_maturity
+                    and investment.face_value is not None
+                    and bool(transactions)
+                )
+                if transactions and (is_bond_htm or prices):
+                    if is_bond_htm:
+                        face_value = investment.face_value
+                        assert face_value is not None  # implied by is_bond_htm
+                        inv_total_value = (
+                            InvestmentCalculationService.calculate_total_value_bond(
+                                transactions,
+                                face_value,
+                                reference_currency,
+                                rates,
+                            )
+                        )
+                    else:
+                        inv_total_value = InvestmentCalculationService.calculate_total_value(
+                            transactions, prices[0].price, reference_currency, rates
+                        )
                     inv_yield = InvestmentCalculationService.calculate_yield(
                         inv_total_value, initial_amount
                     )
@@ -220,6 +240,14 @@ class PortfolioAnalyticsUseCases:
                 inv_yield = None
                 inv_yield_pct = None
 
+            coupon_income = (
+                InvestmentCalculationService.calculate_total_coupon_income(
+                    transactions, reference_currency, rates
+                )
+                if transactions
+                else None
+            )
+
             inv_analytics = InvestmentAnalyticsDTO(
                 investment_id=investment.id,
                 identifier=investment.identifier.value,
@@ -232,16 +260,31 @@ class PortfolioAnalyticsUseCases:
                 yield_amount=inv_yield.amount if inv_yield else None,
                 yield_percentage=inv_yield_pct,
                 allocation_percentage=allocation.get(investment.id, 0),
+                coupon_income=coupon_income.amount if coupon_income else None,
             )
             investment_analytics_list.append(inv_analytics)
 
         # Build response DTO
+        # Total coupon income across all investments (all in reference_currency).
+        total_coupon_income = None
+        if investments:
+            total_coupon = Decimal("0")
+            for investment in investments:
+                txs = transactions_by_investment.get(investment.id, [])
+                if not txs:
+                    continue
+                total_coupon += InvestmentCalculationService.calculate_total_coupon_income(
+                    txs, reference_currency, rates
+                ).amount
+            total_coupon_income = total_coupon
+
         return PortfolioAnalyticsDTO(
             portfolio_id=portfolio_id,
             total_value=total_value.amount,
             total_invested=total_invested.amount,
             total_yield=total_yield.amount,
             total_yield_percentage=total_yield_pct,
+            total_coupon_income=total_coupon_income,
             allocation=allocation,
             investments=investment_analytics_list,
             calculated_at=datetime.utcnow(),

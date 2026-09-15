@@ -132,6 +132,9 @@ class CreateInvestmentRequest(BaseModel):
         ...,
         pattern="^(stock|bond|etf|crypto|mutual_fund|commodity|other)$",
     )
+    held_to_maturity: bool = False
+    face_value: Decimal | None = None
+    face_value_currency: str = Field(default="USD", pattern="^[A-Z]{3}$")
 
 
 class CreateTransactionRequest(BaseModel):
@@ -140,6 +143,7 @@ class CreateTransactionRequest(BaseModel):
     broker: str = Field(..., min_length=1, max_length=100)
     date: datetime
     currency: str = Field(default="USD", pattern="^[A-Z]{3}$")
+    kind: str = Field(default="buy", pattern="^(buy|coupon)$")
 
 
 class CreatePriceHistoryRequest(BaseModel):
@@ -195,6 +199,9 @@ class InvestmentResponseModel(BaseModel):
     type: str
     created_at: datetime
     updated_at: datetime | None = None
+    held_to_maturity: bool = False
+    face_value: Decimal | None = None
+    face_value_currency: str = "USD"
 
     model_config = {"from_attributes": True}
 
@@ -209,6 +216,7 @@ class TransactionResponseModel(BaseModel):
     created_at: datetime
     updated_at: datetime
     currency: str = "USD"
+    kind: str = "buy"
 
     model_config = {"from_attributes": True}
 
@@ -409,6 +417,9 @@ async def create_investment(
         identifier=request.identifier,
         identifier_type=request.identifier_type,
         type=request.type,
+        held_to_maturity=request.held_to_maturity,
+        face_value=request.face_value,
+        face_value_currency=request.face_value_currency,
     )
     investment = investment_use_cases.create_investment(user_id, dto)
     return InvestmentResponseModel.model_validate(investment)
@@ -458,6 +469,7 @@ async def create_transaction(
         broker=request.broker,
         date=request.date,
         currency=request.currency,
+        kind=request.kind,
     )
     transaction = transaction_use_cases.create_transaction(user_id, dto)
     return TransactionResponseModel.model_validate(transaction)

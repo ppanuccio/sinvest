@@ -54,16 +54,35 @@ class PortfolioCalculationService:
                 investment.id, []
             )
 
-            if not price_history:
-                # Cannot calculate value without price
+            # A held-to-maturity bond is valued on its face value basis even
+            # without a live market price.
+            is_bond_htm = (
+                investment.held_to_maturity
+                and investment.face_value is not None
+                and bool(transactions)
+            )
+
+            if not is_bond_htm and not price_history:
+                # Cannot calculate value without price (and not a HTM bond)
                 continue
 
-            current_price = price_history[0].price  # Latest price
-
             try:
-                inv_value = InvestmentCalculationService.calculate_total_value(
-                    transactions, current_price, reference_currency, rates
-                )
+                if is_bond_htm:
+                    face_value = investment.face_value
+                    assert face_value is not None  # implied by is_bond_htm
+                    inv_value = (
+                        InvestmentCalculationService.calculate_total_value_bond(
+                            transactions,
+                            face_value,
+                            reference_currency,
+                            rates,
+                        )
+                    )
+                else:
+                    current_price = price_history[0].price  # Latest price
+                    inv_value = InvestmentCalculationService.calculate_total_value(
+                        transactions, current_price, reference_currency, rates
+                    )
                 inv_invested = (
                     InvestmentCalculationService.calculate_total_invested_amount(
                         transactions, reference_currency, rates
@@ -111,7 +130,7 @@ class PortfolioCalculationService:
         All amounts are converted to reference_currency using the provided rates.
         Returns: {investment_id: percentage}
         """
-        allocation = {}
+        allocation: Dict[str, Decimal] = {}
 
         if not investments:
             return allocation
@@ -128,15 +147,33 @@ class PortfolioCalculationService:
                 investment.id, []
             )
 
-            if not price_history:
+            is_bond_htm = (
+                investment.held_to_maturity
+                and investment.face_value is not None
+                and bool(transactions)
+            )
+
+            if not is_bond_htm and not price_history:
                 investment_values[investment.id] = Decimal("0")
                 continue
 
-            current_price = price_history[0].price
             try:
-                inv_value = InvestmentCalculationService.calculate_total_value(
-                    transactions, current_price, reference_currency, rates
-                )
+                if is_bond_htm:
+                    face_value = investment.face_value
+                    assert face_value is not None  # implied by is_bond_htm
+                    inv_value = (
+                        InvestmentCalculationService.calculate_total_value_bond(
+                            transactions,
+                            face_value,
+                            reference_currency,
+                            rates,
+                        )
+                    )
+                else:
+                    current_price = price_history[0].price
+                    inv_value = InvestmentCalculationService.calculate_total_value(
+                        transactions, current_price, reference_currency, rates
+                    )
                 investment_values[investment.id] = inv_value.amount
                 total_value += inv_value.amount
             except Exception:

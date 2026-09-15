@@ -340,6 +340,13 @@ class FileBasedInvestmentRepository(InvestmentRepository):
             "type": investment.type,
             "created_at": investment.created_at,
             "updated_at": investment.updated_at,
+            "held_to_maturity": investment.held_to_maturity,
+            "face_value": investment.face_value,
+            "face_value_currency": (
+                investment.face_value.currency
+                if investment.face_value is not None
+                else None
+            ),
         }
         investments[investment.id] = investment_data
         self._save(investments)
@@ -354,6 +361,7 @@ class FileBasedInvestmentRepository(InvestmentRepository):
         investment_type = _decode_value(i["type"])
         if isinstance(investment_type, str):
             investment_type = InvestmentType(investment_type)
+        face_value = _decode_value(i.get("face_value"))
         return Investment(
             id=i["id"],
             portfolio_id=i["portfolio_id"],
@@ -361,6 +369,8 @@ class FileBasedInvestmentRepository(InvestmentRepository):
             type=investment_type,
             created_at=_decode_value(i["created_at"]),
             updated_at=_decode_value(i.get("updated_at")),
+            held_to_maturity=i.get("held_to_maturity", False),
+            face_value=face_value or None,
         )
 
     def list_by_portfolio(self, portfolio_id: str) -> List[Investment]:
@@ -372,6 +382,7 @@ class FileBasedInvestmentRepository(InvestmentRepository):
                 investment_type = _decode_value(i["type"])
                 if isinstance(investment_type, str):
                     investment_type = InvestmentType(investment_type)
+                face_value = _decode_value(i.get("face_value"))
                 result.append(
                     Investment(
                         id=i["id"],
@@ -380,6 +391,8 @@ class FileBasedInvestmentRepository(InvestmentRepository):
                         type=investment_type,
                         created_at=_decode_value(i["created_at"]),
                         updated_at=_decode_value(i.get("updated_at")),
+                        held_to_maturity=i.get("held_to_maturity", False),
+                        face_value=face_value or None,
                     )
                 )
         return result
@@ -432,6 +445,7 @@ class FileBasedTransactionRepository(TransactionRepository):
             "quantity": transaction.quantity,
             "broker": transaction.broker,
             "date": transaction.date,
+            "kind": transaction.kind,
             "created_at": transaction.created_at,
             "updated_at": transaction.updated_at,
         }
@@ -451,6 +465,7 @@ class FileBasedTransactionRepository(TransactionRepository):
             quantity=_decode_value(t["quantity"]),
             broker=t["broker"],
             date=_decode_value(t["date"]),
+            kind=t.get("kind", "buy"),
             created_at=_decode_value(t["created_at"]),
             updated_at=_decode_value(t["updated_at"]),
         )
@@ -468,6 +483,7 @@ class FileBasedTransactionRepository(TransactionRepository):
                         quantity=_decode_value(t["quantity"]),
                         broker=t["broker"],
                         date=_decode_value(t["date"]),
+                        kind=t.get("kind", "buy"),
                         created_at=_decode_value(t["created_at"]),
                         updated_at=_decode_value(t["updated_at"]),
                     )

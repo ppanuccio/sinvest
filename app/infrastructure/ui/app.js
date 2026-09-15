@@ -248,12 +248,21 @@ async function createInvestment() {
     setStatus('Select a portfolio and enter an investment identifier.', true);
     return;
   }
-  const res = await request('POST', `/users/${userId}/portfolios/${portfolioId}/investments`, {
+  const body = {
     portfolio_id: portfolioId,
     identifier,
     identifier_type: identifierType,
     type,
-  });
+  };
+  if (type === 'bond') {
+    body.held_to_maturity = document.getElementById('inv-held-to-maturity').checked;
+    const faceValue = document.getElementById('inv-face-value').value.trim();
+    if (body.held_to_maturity && faceValue !== '') {
+      body.face_value = Number(faceValue);
+      body.face_value_currency = document.getElementById('inv-face-value-currency').value;
+    }
+  }
+  const res = await request('POST', `/users/${userId}/portfolios/${portfolioId}/investments`, body);
   document.getElementById('out-create-investment').textContent = JSON.stringify(res, null, 2);
   if (res.status === 201 || res.status === 200) {
     setStatus('Investment added. Refreshing holdings.');
@@ -309,6 +318,7 @@ async function createTransaction() {
   const broker = document.getElementById('tx-broker').value.trim();
   const date = document.getElementById('tx-date').value.trim();
   const currency = document.getElementById('tx-currency').value;
+  const kind = document.getElementById('tx-kind').value;
   if (!userId || !investmentId || !amount || !quantity || !broker || !date) {
     setStatus('All transaction fields are required.', true);
     return;
@@ -320,6 +330,7 @@ async function createTransaction() {
     broker,
     date,
     currency,
+    kind,
   });
   document.getElementById('out-create-transaction').textContent = JSON.stringify(res, null, 2);
   if (res.status === 201 || res.status === 200) {
@@ -478,16 +489,19 @@ function renderOverview() {
   const valueEl = document.getElementById('summary-value');
   const investedEl = document.getElementById('summary-invested');
   const yieldEl = document.getElementById('summary-yield');
+  const couponsEl = document.getElementById('summary-coupons');
   if (!state.analytics) {
     valueEl.textContent = '–';
     investedEl.textContent = '–';
     yieldEl.textContent = '–';
+    couponsEl.textContent = '–';
     return;
   }
   valueEl.textContent = formatMoney(state.analytics.total_value);
   investedEl.textContent = formatMoney(state.analytics.total_invested);
   yieldEl.textContent = `${formatMoney(state.analytics.total_yield)} (${formatPercent(state.analytics.total_yield_percentage)})`;
   yieldEl.className = Number(state.analytics.total_yield) >= 0 ? 'positive' : 'negative';
+  couponsEl.textContent = formatMoney(state.analytics.total_coupon_income);
 }
 
 function renderComposition() {
@@ -547,6 +561,7 @@ function renderInvestments() {
       <td>${formatMoney(inv.total_invested)}</td>
       <td>${formatMoney(inv.total_value)}</td>
       <td class="${gainClass}">${formatMoney(inv.yield_amount)} (${formatPercent(inv.yield_percentage)})</td>
+      <td>${formatMoney(inv.coupon_income)}</td>
       <td>${formatPercent(inv.allocation_percentage)}</td>
       <td style="white-space: nowrap;">
         <button class="fetch-price-btn" data-investment-id="${inv.investment_id}" data-identifier="${inv.identifier || ''}" title="Fetch live price from Yahoo Finance">
@@ -653,6 +668,20 @@ function initializeEventListeners() {
   // Quick actions
   document.getElementById('btn-create-investment').addEventListener('click', createInvestment);
   document.getElementById('btn-create-transaction').addEventListener('click', createTransaction);
+
+  // Show/hide bond fields when Asset Class changes
+  const invTypeSelect = document.getElementById('inv-type');
+  const bondFields = document.getElementById('bond-fields');
+  const toggleBondFields = () => {
+    const isBond = invTypeSelect.value === 'bond';
+    bondFields.classList.toggle('hidden', !isBond);
+    if (!isBond) {
+      document.getElementById('inv-held-to-maturity').checked = false;
+      document.getElementById('inv-face-value').value = '';
+    }
+  };
+  invTypeSelect.addEventListener('change', toggleBondFields);
+  toggleBondFields();
   document.getElementById('btn-refresh').addEventListener('click', refreshDashboard);
   document.getElementById('btn-fetch-all-prices').addEventListener('click', fetchAllPrices);
 

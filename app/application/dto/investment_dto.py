@@ -16,6 +16,9 @@ class CreateInvestmentDTO:
     identifier: str
     identifier_type: str  # "ISIN" or "TICKER"
     type: str  # "stock", "bond", "etf", etc.
+    held_to_maturity: bool = False
+    face_value: Optional[Decimal] = None
+    face_value_currency: str = "USD"
 
 
 @dataclass
@@ -23,6 +26,9 @@ class UpdateInvestmentDTO:
     """DTO for updating investment details."""
 
     type: Optional[str] = None
+    held_to_maturity: Optional[bool] = None
+    face_value: Optional[Decimal] = None
+    face_value_currency: Optional[str] = None
 
 
 @dataclass
@@ -54,6 +60,9 @@ class InvestmentResponseDTO:
     type: str
     created_at: datetime
     updated_at: Optional[datetime]
+    held_to_maturity: bool = False
+    face_value: Optional[Decimal] = None
+    face_value_currency: str = "USD"
 
     class Config:
         from_attributes = True

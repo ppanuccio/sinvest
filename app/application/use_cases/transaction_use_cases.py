@@ -14,6 +14,7 @@ from app.domain.services.validation_service import ValidationService
 from app.domain.exceptions import (
     EntityNotFoundException,
     UnauthorizedException,
+    InvalidTransactionException,
 )
 from app.application.dto.transaction_dto import (
     CreateTransactionDTO,
@@ -58,6 +59,10 @@ class TransactionUseCases:
         self.validation_service.validate_transaction_quantity(dto.quantity)
         self.validation_service.validate_transaction_broker(dto.broker)
         self.validation_service.validate_transaction_date(dto.date)
+        if dto.kind not in ("buy", "coupon"):
+            raise InvalidTransactionException(
+                "kind must be 'buy' or 'coupon'"
+            )
 
         # Create value objects
         money = Money(dto.amount, dto.currency)
@@ -71,6 +76,7 @@ class TransactionUseCases:
             quantity=quantity,
             broker=dto.broker,
             date=dto.date,
+            kind=dto.kind,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
         )
@@ -172,12 +178,16 @@ class TransactionUseCases:
         if updated_date:
             self.validation_service.validate_transaction_date(updated_date)
 
+        if dto.kind is not None and dto.kind not in ("buy", "coupon"):
+            raise InvalidTransactionException("kind must be 'buy' or 'coupon'")
+
         # Update entity
         transaction.update_details(
             amount=updated_amount,
             quantity=updated_quantity,
             broker=updated_broker,
             date=updated_date,
+            kind=dto.kind,
             updated_at=datetime.utcnow(),
         )
 
@@ -220,4 +230,5 @@ class TransactionUseCases:
             created_at=transaction.created_at,
             updated_at=transaction.updated_at,
             currency=transaction.amount.currency,
+            kind=transaction.kind,
         )

@@ -168,6 +168,179 @@ class TestInvestmentCalculationService:
         )
         assert result.amount == Decimal("-200")
 
+    def test_calculate_total_quantity_excludes_coupons(self):
+        """Test that coupon transactions are excluded from total quantity."""
+        buy = Transaction(
+            id="tx-1",
+            investment_id="inv-1",
+            amount=Money(Decimal("900"), "USD"),
+            quantity=Quantity(Decimal("10")),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=2),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        coupon = Transaction(
+            id="tx-2",
+            investment_id="inv-1",
+            amount=Money(Decimal("15"), "USD"),
+            quantity=Quantity(Decimal("1")),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+            kind="coupon",
+        )
+        result = InvestmentCalculationService.calculate_total_quantity(
+            [buy, coupon]
+        )
+        assert result == Decimal("10")
+
+    def test_calculate_total_invested_amount_excludes_coupons(self):
+        """Test that coupon amounts are excluded from total invested."""
+        buy = Transaction(
+            id="tx-1",
+            investment_id="inv-1",
+            amount=Money(Decimal("900"), "USD"),
+            quantity=Quantity(Decimal("10")),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=2),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        coupon = Transaction(
+            id="tx-2",
+            investment_id="inv-1",
+            amount=Money(Decimal("15"), "USD"),
+            quantity=Quantity(Decimal("1")),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+            kind="coupon",
+        )
+        result = InvestmentCalculationService.calculate_total_invested_amount(
+            [buy, coupon]
+        )
+        assert result.amount == Decimal("900")
+
+    def test_calculate_total_coupon_income(self):
+        """Test that coupon income sums coupon amounts only."""
+        buy = Transaction(
+            id="tx-1",
+            investment_id="inv-1",
+            amount=Money(Decimal("900"), "USD"),
+            quantity=Quantity(Decimal("10")),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=2),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        coupon = Transaction(
+            id="tx-2",
+            investment_id="inv-1",
+            amount=Money(Decimal("15"), "USD"),
+            quantity=Quantity(Decimal("1")),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+            kind="coupon",
+        )
+        result = InvestmentCalculationService.calculate_total_coupon_income(
+            [buy, coupon]
+        )
+        assert result.amount == Decimal("15")
+
+    def test_calculate_total_value_bond_formula(self):
+        """Test held-to-maturity bond value formula.
+
+        face=100, qty=10 => redemption 1000
+        buy cost=900, coupon income=15
+        value = 1000 - 900 + 15 = 115
+        """
+        buy = Transaction(
+            id="tx-1",
+            investment_id="inv-1",
+            amount=Money(Decimal("900"), "USD"),
+            quantity=Quantity(Decimal("10")),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=2),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        coupon = Transaction(
+            id="tx-2",
+            investment_id="inv-1",
+            amount=Money(Decimal("15"), "USD"),
+            quantity=Quantity(Decimal("1")),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+            kind="coupon",
+        )
+        face_value = Money(Decimal("100"), "USD")
+        result = InvestmentCalculationService.calculate_total_value_bond(
+            [buy, coupon], face_value
+        )
+        assert result.amount == Decimal("115")
+
+    def test_calculate_total_value_bond_no_transactions(self):
+        """Test bond value with no transactions is zero."""
+        face_value = Money(Decimal("100"), "USD")
+        result = InvestmentCalculationService.calculate_total_value_bond(
+            [], face_value
+        )
+        assert result.amount == Decimal("0")
+
+    def test_calculate_initial_amount_excludes_coupons(self):
+        """A coupon before any buy never forms the capital basis."""
+        coupon = Transaction(
+            id="tx-1",
+            investment_id="inv-1",
+            amount=Money(Decimal("15"), "USD"),
+            quantity=Quantity(Decimal("1")),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=5),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+            kind="coupon",
+        )
+        buy = Transaction(
+            id="tx-2",
+            investment_id="inv-1",
+            amount=Money(Decimal("900"), "USD"),
+            quantity=Quantity(Decimal("10")),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=2),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        result = InvestmentCalculationService.calculate_initial_amount(
+            [coupon, buy]
+        )
+        assert result is not None
+        assert result.amount == Decimal("900")
+
+    def test_calculate_initial_amount_only_coupons_returns_none(self):
+        """Coupon-only history has no capital basis at all."""
+        coupon = Transaction(
+            id="tx-1",
+            investment_id="inv-1",
+            amount=Money(Decimal("15"), "USD"),
+            quantity=Quantity(Decimal("1")),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=2),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+            kind="coupon",
+        )
+        result = InvestmentCalculationService.calculate_initial_amount(
+            [coupon]
+        )
+        assert result is None
+
     def test_calculate_yield_positive(self):
         """Test yield calculation with positive return."""
         total_value = Money(Decimal("500"), "USD")

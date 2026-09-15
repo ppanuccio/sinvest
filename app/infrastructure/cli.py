@@ -171,6 +171,24 @@ class CLI:
             choices=["stock", "bond", "etf", "crypto", "mutual_fund", "commodity", "other"],
             help="Investment type",
         )
+        parser.add_argument(
+            "--held-to-maturity",
+            action="store_true",
+            default=False,
+            help="Bond held until redemption (bonds only)",
+        )
+        parser.add_argument(
+            "--face-value",
+            type=Decimal,
+            default=None,
+            help="Per-unit face/nominal value for a held-to-maturity bond",
+        )
+        parser.add_argument(
+            "--face-value-currency",
+            type=str,
+            default="USD",
+            help="Currency of the face value (default: USD)",
+        )
 
     def _add_create_transaction(self, subparsers: argparse._SubParsersAction) -> None:
         parser = subparsers.add_parser(
@@ -185,6 +203,13 @@ class CLI:
             "date",
             type=str,
             help="Transaction date in ISO format, e.g. 2026-05-23T15:30:00",
+        )
+        parser.add_argument(
+            "--kind",
+            type=str,
+            choices=["buy", "coupon"],
+            default="buy",
+            help="Transaction kind: buy or coupon (default: buy)",
         )
 
     def _add_list_portfolios(self, subparsers: argparse._SubParsersAction) -> None:
@@ -244,6 +269,9 @@ class CLI:
             identifier=parsed.identifier,
             identifier_type=parsed.identifier_type,
             type=parsed.type,
+            held_to_maturity=getattr(parsed, "held_to_maturity", False),
+            face_value=getattr(parsed, "face_value", None),
+            face_value_currency=getattr(parsed, "face_value_currency", "USD"),
         )
         investment = self.investment_use_cases.create_investment(
             parsed.user_id, dto
@@ -258,6 +286,7 @@ class CLI:
             quantity=parsed.quantity,
             broker=parsed.broker,
             date=transaction_date,
+            kind=getattr(parsed, "kind", "buy"),
         )
         transaction = self.transaction_use_cases.create_transaction(
             parsed.user_id, dto

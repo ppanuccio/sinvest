@@ -21,6 +21,7 @@ class InvestmentAnalyticsDTO:
     yield_amount: Decimal
     yield_percentage: Optional[Decimal]
     allocation_percentage: Decimal
+    coupon_income: Optional[Decimal] = None
 
 
 @dataclass
@@ -35,6 +36,7 @@ class PortfolioAnalyticsDTO:
     allocation: Dict[str, Decimal]  # investment_id: percentage
     investments: List[InvestmentAnalyticsDTO]
     calculated_at: datetime
+    total_coupon_income: Optional[Decimal] = None
 
     class Config:
         from_attributes = True

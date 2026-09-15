@@ -170,6 +170,74 @@ class TestPortfolioAnalyticsUseCases:
         assert result.allocation[investment_id] == Decimal("100")
 
     @pytest.mark.asyncio
+    async def test_get_portfolio_analytics_bond_htm_no_price(self, use_cases):
+        """Test held-to-maturity bond with no price history is valued on face value."""
+        user_dto = CreateUserDTO(
+            username="test_user",
+            email="test@example.com",
+            password="password123",
+        )
+        user = use_cases["user"].create_user(user_dto)
+
+        portfolio_dto = CreatePortfolioDTO(
+            user_id=user.id,
+            name="Test Portfolio",
+        )
+        portfolio = use_cases["portfolio"].create_portfolio(
+            user.id, portfolio_dto
+        )
+
+        # Create held-to-maturity bond (face value 100 USD/unit)
+        inv_dto = CreateInvestmentDTO(
+            portfolio_id=portfolio.id,
+            identifier="US1234567890",
+            identifier_type="ISIN",
+            type="bond",
+            held_to_maturity=True,
+            face_value=Decimal("100"),
+            face_value_currency="USD",
+        )
+        investment = use_cases["investment"].create_investment(user.id, inv_dto)
+
+        # Buy 10 units @ cost 900 USD
+        buy_dto = CreateTransactionDTO(
+            investment_id=investment.id,
+            amount=Decimal("900"),
+            quantity=Decimal("10"),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=10),
+        )
+        use_cases["transaction"].create_transaction(user.id, buy_dto)
+
+        # One coupon of 15 USD
+        coupon_dto = CreateTransactionDTO(
+            investment_id=investment.id,
+            amount=Decimal("15"),
+            quantity=Decimal("1"),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=1),
+            kind="coupon",
+        )
+        use_cases["transaction"].create_transaction(user.id, coupon_dto)
+
+        # No price history recorded
+        result = await use_cases["analytics"].get_portfolio_analytics(
+            portfolio.id, user.id
+        )
+
+        assert len(result.investments) == 1
+        inv = result.investments[0]
+        # value = (100 * 10) - 900 + 15 = 115
+        assert inv.total_value == Decimal("115")
+        assert inv.total_invested == Decimal("900")
+        assert inv.coupon_income == Decimal("15")
+        assert inv.yield_amount == Decimal("115")
+        assert inv.yield_percentage is not None
+        assert inv.yield_percentage > 0  # ~12.78%
+        assert result.total_value == Decimal("115")
+        assert result.total_coupon_income == Decimal("15")
+
+    @pytest.mark.asyncio
     async def test_portfolio_analytics_unauthorized(
         self, use_cases, setup_portfolio_with_data
     ):

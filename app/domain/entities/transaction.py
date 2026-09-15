@@ -10,8 +10,9 @@ from app.domain.value_objects import Money, Quantity
 @dataclass
 class Transaction:
     """
-    Transaction entity - represents a single buy/sell transaction.
-    Amount is the total cost, quantity is the number of units.
+    Transaction entity - represents a buy or coupon transaction.
+    Amount is the total cost (for buys) or coupon value received (for coupons),
+    quantity is the number of units.
     """
 
     id: str
@@ -20,6 +21,7 @@ class Transaction:
     quantity: Quantity  # Number of units acquired
     broker: str
     date: datetime
+    kind: str = "buy"  # "buy" or "coupon"
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime = field(default_factory=datetime.utcnow)
 
@@ -33,6 +35,8 @@ class Transaction:
             raise ValueError("quantity must be a Quantity value object")
         if not self.broker or len(self.broker) < 1:
             raise ValueError("broker name is required")
+        if self.kind not in ("buy", "coupon"):
+            raise ValueError("kind must be 'buy' or 'coupon'")
         if self.date > datetime.utcnow():
             raise ValueError("transaction date cannot be in the future")
 
@@ -47,6 +51,7 @@ class Transaction:
         quantity: Quantity | None = None,
         broker: str | None = None,
         date: datetime | None = None,
+        kind: str | None = None,
         updated_at: datetime | None = None,
     ) -> None:
         """Update transaction details."""
@@ -64,6 +69,11 @@ class Transaction:
             if not broker or len(broker) < 1:
                 raise ValueError("broker name is required")
             object.__setattr__(self, "broker", broker)
+
+        if kind is not None:
+            if kind not in ("buy", "coupon"):
+                raise ValueError("kind must be 'buy' or 'coupon'")
+            object.__setattr__(self, "kind", kind)
 
         if date is not None:
             if date > datetime.utcnow():
