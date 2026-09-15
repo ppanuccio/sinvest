@@ -129,9 +129,9 @@ class TestPortfolioAnalyticsUseCases:
         )
 
         assert result.portfolio_id == portfolio_id
-        assert result.total_value > 0  # (150 * 10) - 1000 = 500
+        assert result.total_value > 0  # 150 * 10 = 1500 (position value)
         assert result.total_invested == Decimal("1000")
-        assert result.total_yield > 0  # 500
+        assert result.total_yield > 0  # 1500 - 1000 = 500
         assert len(result.investments) == 1
 
     @pytest.mark.asyncio
@@ -147,11 +147,11 @@ class TestPortfolioAnalyticsUseCases:
 
         # Verify calculations
         # Buy 10 @ $100 = $1000 invested
-        # Current price $150 = $1500 total value
-        # Profit = 1500 - 1000 = 500
+        # Current price $150 = $1500 position value (what it is worth)
+        # Gain = 1500 - 1000 = 500 (no coupons)
         # Yield % = 500 / 1000 = 50%
         assert result.total_invested == Decimal("1000")
-        assert result.total_value == Decimal("500")  # Net value after cost
+        assert result.total_value == Decimal("1500")  # Position value
         assert result.total_yield == Decimal("500")
         assert result.total_yield_percentage == Decimal("50")
 
@@ -227,15 +227,91 @@ class TestPortfolioAnalyticsUseCases:
 
         assert len(result.investments) == 1
         inv = result.investments[0]
-        # value = (100 * 10) - 900 + 15 = 115
-        assert inv.total_value == Decimal("115")
+        # total_value = face redemption (100 x 10) = 1000 (what it is worth)
+        assert inv.total_value == Decimal("1000")
         assert inv.total_invested == Decimal("900")
         assert inv.coupon_income == Decimal("15")
+        # gain = 1000 - 900 + 15 = 115
         assert inv.yield_amount == Decimal("115")
         assert inv.yield_percentage is not None
         assert inv.yield_percentage > 0  # ~12.78%
-        assert result.total_value == Decimal("115")
+        assert result.total_value == Decimal("1000")
         assert result.total_coupon_income == Decimal("15")
+        assert result.allocation[investment.id] == Decimal("100")
+
+    @pytest.mark.asyncio
+    async def test_get_portfolio_analytics_bond_with_price_includes_coupons(
+        self, use_cases
+    ):
+        """A market-priced bond's value includes coupons received while holding.
+
+        buy 10 units @ 900 USD, coupon 15 USD, live price 95 USD:
+        value = (95 x 10) - 900 + 15 = 65
+        """
+        user_dto = CreateUserDTO(
+            username="bond_trader",
+            email="bond@example.com",
+            password="password123",
+        )
+        user = use_cases["user"].create_user(user_dto)
+
+        portfolio = use_cases["portfolio"].create_portfolio(
+            user.id,
+            CreatePortfolioDTO(user_id=user.id, name="Bond Portfolio"),
+        )
+
+        # Tradable bond: no held_to_maturity / face value
+        inv_dto = CreateInvestmentDTO(
+            portfolio_id=portfolio.id,
+            identifier="US1234567891",
+            identifier_type="ISIN",
+            type="bond",
+        )
+        investment = use_cases["investment"].create_investment(user.id, inv_dto)
+
+        use_cases["transaction"].create_transaction(
+            user.id,
+            CreateTransactionDTO(
+                investment_id=investment.id,
+                amount=Decimal("900"),
+                quantity=Decimal("10"),
+                broker="Broker",
+                date=datetime.utcnow() - timedelta(days=10),
+            ),
+        )
+        use_cases["transaction"].create_transaction(
+            user.id,
+            CreateTransactionDTO(
+                investment_id=investment.id,
+                amount=Decimal("15"),
+                quantity=Decimal("1"),
+                broker="Broker",
+                date=datetime.utcnow() - timedelta(days=1),
+                kind="coupon",
+            ),
+        )
+        use_cases["price_history"].record_price(
+            user.id,
+            CreatePriceHistoryDTO(
+                investment_id=investment.id,
+                price=Decimal("95"),
+                date=datetime.utcnow() - timedelta(days=1),
+            ),
+        )
+
+        result = await use_cases["analytics"].get_portfolio_analytics(
+            portfolio.id, user.id
+        )
+
+        inv = result.investments[0]
+        # total_value = market value (95 x 10) = 950 (what it is worth)
+        assert inv.total_value == Decimal("950")
+        assert inv.coupon_income == Decimal("15")
+        # gain = 950 - 900 + 15 = 65
+        assert inv.yield_amount == Decimal("65")
+        assert result.total_value == Decimal("950")
+        assert result.total_coupon_income == Decimal("15")
+        assert result.allocation[investment.id] == Decimal("100")
 
     @pytest.mark.asyncio
     async def test_portfolio_analytics_unauthorized(
@@ -328,8 +404,9 @@ class TestPortfolioAnalyticsUseCases:
         # Verify
         assert len(result.investments) == 2
         assert result.total_invested == Decimal("3000")
-        # (150*10 - 1000) + (150*20 - 2000) = 500 + 1000 = 1500
-        assert result.total_value == Decimal("1500")
+        # Position values: (150*10) + (150*20) = 1500 + 3000 = 4500
+        assert result.total_value == Decimal("4500")
+        # Gain: (1500-1000) + (3000-2000) = 500 + 1000 = 1500
         assert result.total_yield == Decimal("1500")
         # 1500 / 3000 = 50%
         assert result.total_yield_percentage == Decimal("50")

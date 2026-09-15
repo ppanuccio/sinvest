@@ -122,7 +122,11 @@ class InvestmentCalculationService:
     ) -> Money:
         """
         Calculate current total value of the investment.
-        Formula: (current_price × total_quantity) - sum(transaction_amounts)
+        Formula: (current_price × total_quantity) - sum(BUY amounts) + coupon income
+
+        Coupon transactions are income received while holding the investment
+        (e.g. bond coupons), so they count toward the total return alongside
+        the unrealized price gain.
 
         All amounts are converted to reference_currency using the provided rates.
         """
@@ -141,15 +145,20 @@ class InvestmentCalculationService:
                     transactions, reference_currency, rates
                 )
             )
+            coupon_income = (
+                InvestmentCalculationService.calculate_total_coupon_income(
+                    transactions, reference_currency, rates
+                )
+            )
 
             # Convert current price to reference currency
             converted_price = InvestmentCalculationService._convert_amount(
                 current_price, reference_currency, rates
             )
 
-            # Calculate: (price × quantity) - sum(amounts)
+            # Calculate: (price × quantity) - sum(amounts) + coupons
             current_value = converted_price * total_qty
-            net_value = current_value - total_invested
+            net_value = current_value - total_invested + coupon_income
 
             return net_value
 
@@ -265,6 +274,35 @@ class InvestmentCalculationService:
         )
 
         return Money(redemption_ref.amount - invested_ref.amount + coupons_ref.amount, reference_currency)
+
+    @staticmethod
+    def calculate_position_value(
+        transactions: List[Transaction],
+        unit_value: Money,
+        reference_currency: str = "USD",
+        rates: dict[str, Decimal] | None = None,
+    ) -> Money:
+        """
+        Gross value of the holding: unit_value × BUY quantity.
+
+        unit_value is the per-unit worth of one unit — the live market price
+        for a tradable investment, or the face value for a held-to-maturity
+        bond. Unlike calculate_total_value this is NOT net of the invested
+        amount: it is what the position is worth, the correct basis for
+        portfolio allocation weights.
+
+        All amounts are converted to reference_currency using the provided rates.
+        """
+        if rates is None:
+            rates = {}
+
+        total_qty = InvestmentCalculationService.calculate_total_quantity(
+            transactions
+        )
+        converted_unit = InvestmentCalculationService._convert_amount(
+            unit_value, reference_currency, rates
+        )
+        return converted_unit * total_qty
 
     @staticmethod
     def get_price_per_unit(

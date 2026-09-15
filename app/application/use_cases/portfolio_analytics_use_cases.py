@@ -174,7 +174,22 @@ class PortfolioAnalyticsUseCases:
                 transactions
             )
 
-            # Calculate remaining metrics with currency conversion
+            # A held-to-maturity bond is valued on its face value basis even
+            # when there is no live market price.
+            is_bond_htm = (
+                investment.held_to_maturity
+                and investment.face_value is not None
+                and bool(transactions)
+            )
+
+            # Calculate remaining metrics with currency conversion.
+            # total_value = what the holding is WORTH (position value);
+            # yield = total return = worth − invested + coupons.
+            total_invested_inv = None
+            position_value = None
+            inv_yield = None
+            inv_yield_pct = None
+            initial_amount = None
             try:
                 total_invested_inv = (
                     InvestmentCalculationService.calculate_total_invested_amount(
@@ -184,7 +199,7 @@ class PortfolioAnalyticsUseCases:
                     else None
                 )
                 # Convert initial amount to reference currency so it matches
-                # the currency of total_value (both must be in the same currency
+                # the currency of the gain (both must be in the same currency
                 # for yield calculation to work).
                 raw_initial = (
                     InvestmentCalculationService.calculate_initial_amount(
@@ -202,41 +217,55 @@ class PortfolioAnalyticsUseCases:
                 else:
                     initial_amount = raw_initial
 
-                # Calculate total value. A held-to-maturity bond is valued on
-                # its face value basis even when there is no live market price.
-                is_bond_htm = (
-                    investment.held_to_maturity
-                    and investment.face_value is not None
-                    and bool(transactions)
-                )
-                if transactions and (is_bond_htm or prices):
-                    if is_bond_htm:
-                        face_value = investment.face_value
-                        assert face_value is not None  # implied by is_bond_htm
-                        inv_total_value = (
-                            InvestmentCalculationService.calculate_total_value_bond(
-                                transactions,
-                                face_value,
-                                reference_currency,
-                                rates,
-                            )
-                        )
-                    else:
-                        inv_total_value = InvestmentCalculationService.calculate_total_value(
-                            transactions, prices[0].price, reference_currency, rates
-                        )
+                if transactions and is_bond_htm:
+                    face_value = investment.face_value
+                    assert face_value is not None  # implied by is_bond_htm
+                    position_value = (
+                        InvestmentCalculationService.calculate_position_value(
+                            transactions, face_value, reference_currency, rates
+                        ).amount
+                    )
+                    gain = InvestmentCalculationService.calculate_total_value_bond(
+                        transactions, face_value, reference_currency, rates
+                    )
                     inv_yield = InvestmentCalculationService.calculate_yield(
-                        inv_total_value, initial_amount
+                        gain, initial_amount
                     )
                     inv_yield_pct = InvestmentCalculationService.calculate_yield_percentage(
                         inv_yield, initial_amount
                     )
-                else:
-                    inv_total_value = total_invested_inv or None
-                    inv_yield = None
-                    inv_yield_pct = None
+                elif transactions and prices:
+                    position_value = (
+                        InvestmentCalculationService.calculate_position_value(
+                            transactions, prices[0].price, reference_currency, rates
+                        ).amount
+                    )
+                    gain = InvestmentCalculationService.calculate_total_value(
+                        transactions, prices[0].price, reference_currency, rates
+                    )
+                    inv_yield = InvestmentCalculationService.calculate_yield(
+                        gain, initial_amount
+                    )
+                    inv_yield_pct = InvestmentCalculationService.calculate_yield_percentage(
+                        inv_yield, initial_amount
+                    )
+                elif transactions:
+                    # No price available: the invested cost estimates the
+                    # holding's worth, so the known gain is the income received.
+                    position_value = (
+                        total_invested_inv.amount if total_invested_inv else None
+                    )
+                    gain = InvestmentCalculationService.calculate_total_coupon_income(
+                        transactions, reference_currency, rates
+                    )
+                    inv_yield = InvestmentCalculationService.calculate_yield(
+                        gain, initial_amount
+                    )
+                    inv_yield_pct = InvestmentCalculationService.calculate_yield_percentage(
+                        inv_yield, initial_amount
+                    )
             except Exception as e:
-                inv_total_value = None
+                position_value = None
                 inv_yield = None
                 inv_yield_pct = None
 
@@ -255,7 +284,7 @@ class PortfolioAnalyticsUseCases:
                 total_quantity=total_qty,
                 total_invested=total_invested_inv.amount if total_invested_inv else None,
                 current_price=current_price,
-                total_value=inv_total_value.amount if inv_total_value else None,
+                total_value=position_value,
                 initial_value=initial_amount.amount if initial_amount else None,
                 yield_amount=inv_yield.amount if inv_yield else None,
                 yield_percentage=inv_yield_pct,

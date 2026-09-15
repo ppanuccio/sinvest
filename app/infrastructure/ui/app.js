@@ -314,13 +314,18 @@ async function createTransaction() {
   const userId = state.userId;
   const investmentId = document.getElementById('tx-investment-id').value.trim();
   const amount = document.getElementById('tx-amount').value.trim();
-  const quantity = document.getElementById('tx-quantity').value.trim();
+  const kind = document.getElementById('tx-kind').value;
+  // Coupons are income receipts: no holding quantity is acquired. The API
+  // requires a positive quantity, so coupons are recorded with quantity 1.
+  const isCoupon = kind === 'coupon';
+  const quantity = isCoupon ? '1' : document.getElementById('tx-quantity').value.trim();
   const broker = document.getElementById('tx-broker').value.trim();
   const date = document.getElementById('tx-date').value.trim();
   const currency = document.getElementById('tx-currency').value;
-  const kind = document.getElementById('tx-kind').value;
   if (!userId || !investmentId || !amount || !quantity || !broker || !date) {
-    setStatus('All transaction fields are required.', true);
+    setStatus(isCoupon
+      ? 'Amount, broker and date are required for a coupon.'
+      : 'All transaction fields are required.', true);
     return;
   }
   const res = await request('POST', `/users/${userId}/investments/${investmentId}/transactions`, {
@@ -338,6 +343,7 @@ async function createTransaction() {
     document.getElementById('tx-quantity').value = '';
     document.getElementById('tx-amount').value = '';
     document.getElementById('tx-broker').value = '';
+    updatePriceHint();
     await loadTransactions(userId, investmentId);
     await refreshDashboard();
   } else {
@@ -481,7 +487,16 @@ async function fetchAllPrices() {
     return;
   }
   output.textContent = list
-    .map((item) => `${item.date} • ${item.quantity} @ ${formatMoney(item.amount)} ${item.currency || 'USD'} • ${item.broker}`)
+    .map((item) => {
+      const kind = item.kind || 'buy';
+      if (kind === 'coupon') {
+        return `${item.date} • COUPON received ${formatMoney(item.amount)} ${item.currency || 'USD'} • ${item.broker}`;
+      }
+      const qty = Number(item.quantity);
+      const total = Number(item.amount);
+      const unit = qty > 0 ? total / qty : 0;
+      return `${item.date} • BUY ${item.quantity} units • ${formatMoney(item.amount)} ${item.currency || 'USD'} total (${formatMoney(unit)}/unit) • ${item.broker}`;
+    })
     .join('\n');
 }
 
@@ -516,6 +531,8 @@ function renderComposition() {
     return;
   }
   const groups = state.analytics.investments.reduce((acc, inv) => {
+    // total_value = what the holding is worth (position value), not the
+    // net gain — mix weights must be based on holding sizes.
     acc[inv.type] = (acc[inv.type] || 0) + Number(inv.total_value || 0);
     return acc;
   }, {});
@@ -682,6 +699,45 @@ function initializeEventListeners() {
   };
   invTypeSelect.addEventListener('change', toggleBondFields);
   toggleBondFields();
+
+  // Transaction form: coupons are income receipts (no quantity acquired);
+  // buys show the purchase price per unit derived from amount / quantity.
+  const txKindSelect = document.getElementById('tx-kind');
+  const txQuantityGroup = document.getElementById('tx-quantity-group');
+  const txQuantityInput = document.getElementById('tx-quantity');
+  const txAmountLabel = document.getElementById('tx-amount-label');
+  const txAmountInput = document.getElementById('tx-amount');
+  const txPriceHint = document.getElementById('tx-price-hint');
+
+  function updatePriceHint() {
+    if (txKindSelect.value !== 'buy') {
+      txPriceHint.textContent = '';
+      return;
+    }
+    const amount = Number(txAmountInput.value);
+    const qty = Number(txQuantityInput.value);
+    if (amount > 0 && qty > 0) {
+      txPriceHint.textContent = `Purchase price: ${formatMoney(amount / qty)} per unit`;
+    } else {
+      txPriceHint.textContent = '';
+    }
+  }
+
+  function toggleTxKind() {
+    const isCoupon = txKindSelect.value === 'coupon';
+    txQuantityGroup.classList.toggle('hidden', isCoupon);
+    txAmountLabel.textContent = isCoupon ? 'Coupon received' : 'Amount';
+    if (isCoupon) {
+      txQuantityInput.value = '';
+      txPriceHint.textContent = '';
+    } else {
+      updatePriceHint();
+    }
+  }
+  txKindSelect.addEventListener('change', toggleTxKind);
+  txAmountInput.addEventListener('input', updatePriceHint);
+  txQuantityInput.addEventListener('input', updatePriceHint);
+  toggleTxKind();
   document.getElementById('btn-refresh').addEventListener('click', refreshDashboard);
   document.getElementById('btn-fetch-all-prices').addEventListener('click', fetchAllPrices);
 

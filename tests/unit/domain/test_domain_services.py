@@ -294,6 +294,55 @@ class TestInvestmentCalculationService:
         )
         assert result.amount == Decimal("0")
 
+    def test_calculate_total_value_includes_coupon_income(self):
+        """Market value must count coupons received while holding.
+
+        buy cost=900 (10 units), coupon income=15, live price=95
+        value = (95 x 10) - 900 + 15 = 65
+        """
+        buy = Transaction(
+            id="tx-1",
+            investment_id="inv-1",
+            amount=Money(Decimal("900"), "USD"),
+            quantity=Quantity(Decimal("10")),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=2),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        coupon = Transaction(
+            id="tx-2",
+            investment_id="inv-1",
+            amount=Money(Decimal("15"), "USD"),
+            quantity=Quantity(Decimal("1")),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+            kind="coupon",
+        )
+        result = InvestmentCalculationService.calculate_total_value(
+            [buy, coupon], Money(Decimal("95"), "USD")
+        )
+        assert result.amount == Decimal("65")
+
+    def test_calculate_total_value_no_coupons_unchanged(self):
+        """Without coupon transactions the formula is unchanged."""
+        buy = Transaction(
+            id="tx-1",
+            investment_id="inv-1",
+            amount=Money(Decimal("900"), "USD"),
+            quantity=Quantity(Decimal("10")),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=2),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        result = InvestmentCalculationService.calculate_total_value(
+            [buy], Money(Decimal("95"), "USD")
+        )
+        assert result.amount == Decimal("50")
+
     def test_calculate_initial_amount_excludes_coupons(self):
         """A coupon before any buy never forms the capital basis."""
         coupon = Transaction(
@@ -440,4 +489,118 @@ class TestPortfolioCalculationService:
         )
 
         assert "inv-1" in allocation
+        assert allocation["inv-1"] == Decimal("100")
+
+    def test_calculate_position_value_market_price(self):
+        """Position value = live price × BUY quantity (gross, not net)."""
+        tx = Transaction(
+            id="tx-1",
+            investment_id="inv-1",
+            amount=Money(Decimal("900"), "USD"),
+            quantity=Quantity(Decimal("10")),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        result = InvestmentCalculationService.calculate_position_value(
+            [tx], Money(Decimal("95"), "USD")
+        )
+        assert result.amount == Decimal("950")
+        assert result.currency == "USD"
+
+    def test_allocation_uses_position_values_not_net_gains(self):
+        """Weights follow holding sizes; net gains must not skew them.
+
+        A: 10 units bought at 10 (cost 100), now priced 5 -> position 50, net -50
+        B: 10 units bought at 10 (cost 100), now priced 15 -> position 150, net +50
+        Net-based totals would be 0 (equal split); position-based: A 25%, B 75%.
+        """
+        identifier_a = Identifier.create_ticker("AAA")
+        investment_a = Investment(
+            id="inv-a",
+            portfolio_id="port-1",
+            identifier=identifier_a,
+            type=InvestmentType.STOCK,
+            created_at=datetime.utcnow(),
+        )
+        identifier_b = Identifier.create_ticker("BBB")
+        investment_b = Investment(
+            id="inv-b",
+            portfolio_id="port-1",
+            identifier=identifier_b,
+            type=InvestmentType.STOCK,
+            created_at=datetime.utcnow(),
+        )
+        tx_a = Transaction(
+            id="tx-a",
+            investment_id="inv-a",
+            amount=Money(Decimal("100"), "USD"),
+            quantity=Quantity(Decimal("10")),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        tx_b = Transaction(
+            id="tx-b",
+            investment_id="inv-b",
+            amount=Money(Decimal("100"), "USD"),
+            quantity=Quantity(Decimal("10")),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        price_a = PriceHistory(
+            id="ph-a",
+            investment_id="inv-a",
+            price=Money(Decimal("5"), "USD"),
+            date=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.utcnow(),
+        )
+        price_b = PriceHistory(
+            id="ph-b",
+            investment_id="inv-b",
+            price=Money(Decimal("15"), "USD"),
+            date=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.utcnow(),
+        )
+
+        allocation = PortfolioCalculationService.calculate_allocation_percentages(
+            [investment_a, investment_b],
+            {"inv-a": [tx_a], "inv-b": [tx_b]},
+            {"inv-a": [price_a], "inv-b": [price_b]},
+        )
+
+        assert allocation["inv-a"] == Decimal("25")
+        assert allocation["inv-b"] == Decimal("75")
+
+    def test_allocation_cost_fallback_without_price(self):
+        """Without any price, the invested cost is the weight basis."""
+        identifier = Identifier.create_ticker("BOND")
+        investment = Investment(
+            id="inv-1",
+            portfolio_id="port-1",
+            identifier=identifier,
+            type=InvestmentType.BOND,
+            created_at=datetime.utcnow(),
+        )
+        tx = Transaction(
+            id="tx-1",
+            investment_id="inv-1",
+            amount=Money(Decimal("20000"), "USD"),
+            quantity=Quantity(Decimal("200")),
+            broker="Broker",
+            date=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+
+        allocation = PortfolioCalculationService.calculate_allocation_percentages(
+            [investment],
+            {"inv-1": [tx]},
+            {},  # no price history
+        )
+
         assert allocation["inv-1"] == Decimal("100")

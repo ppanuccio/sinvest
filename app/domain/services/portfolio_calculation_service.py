@@ -31,6 +31,13 @@ class PortfolioCalculationService:
         Calculate portfolio-level totals.
         All amounts are converted to reference_currency using the provided rates.
 
+        Total value is what the holdings are WORTH (position values: market
+        price × quantity, face-value redemption for HTM bonds, or the invested
+        cost when no price is available). Total invested sums every BUY across
+        ALL holdings. Total yield (gain/loss) is the total return — value gained
+        plus income received — so it satisfies the identity
+        gain = total_value − total_invested + coupon_income.
+
         Returns: (total_current_value, total_invested, total_yield, total_yield_percentage)
         """
         if not investments:
@@ -53,6 +60,8 @@ class PortfolioCalculationService:
             price_history = price_history_by_investment.get(
                 investment.id, []
             )
+            if not transactions:
+                continue
 
             # A held-to-maturity bond is valued on its face value basis even
             # without a live market price.
@@ -62,15 +71,29 @@ class PortfolioCalculationService:
                 and bool(transactions)
             )
 
-            if not is_bond_htm and not price_history:
-                # Cannot calculate value without price (and not a HTM bond)
-                continue
-
             try:
+                invested = (
+                    InvestmentCalculationService.calculate_total_invested_amount(
+                        transactions, reference_currency, rates
+                    )
+                )
+                coupons = (
+                    InvestmentCalculationService.calculate_total_coupon_income(
+                        transactions, reference_currency, rates
+                    )
+                )
                 if is_bond_htm:
                     face_value = investment.face_value
                     assert face_value is not None  # implied by is_bond_htm
-                    inv_value = (
+                    position = (
+                        InvestmentCalculationService.calculate_position_value(
+                            transactions,
+                            face_value,
+                            reference_currency,
+                            rates,
+                        )
+                    )
+                    gain = (
                         InvestmentCalculationService.calculate_total_value_bond(
                             transactions,
                             face_value,
@@ -78,33 +101,31 @@ class PortfolioCalculationService:
                             rates,
                         )
                     )
-                else:
+                elif price_history:
                     current_price = price_history[0].price  # Latest price
-                    inv_value = InvestmentCalculationService.calculate_total_value(
+                    position = (
+                        InvestmentCalculationService.calculate_position_value(
+                            transactions,
+                            current_price,
+                            reference_currency,
+                            rates,
+                        )
+                    )
+                    gain = InvestmentCalculationService.calculate_total_value(
                         transactions, current_price, reference_currency, rates
                     )
-                inv_invested = (
-                    InvestmentCalculationService.calculate_total_invested_amount(
-                        transactions, reference_currency, rates
-                    )
-                )
-                initial_amount = InvestmentCalculationService._convert_amount(
-                    InvestmentCalculationService.calculate_initial_amount(
-                        transactions
-                    ) or Money(Decimal("0")),
-                    reference_currency,
-                    rates,
-                )
-                inv_yield = InvestmentCalculationService.calculate_yield(
-                    inv_value, initial_amount
-                )
+                else:
+                    # No live price: the invested cost estimates the holding's
+                    # worth, so the only known gain is the income received.
+                    position = invested
+                    gain = coupons
             except Exception:
                 # Skip this investment — can't calculate
                 continue
 
-            total_value += inv_value.amount
-            total_invested += inv_invested.amount
-            total_yield += inv_yield.amount
+            total_value += position.amount
+            total_invested += invested.amount
+            total_yield += gain.amount
 
         total_value_obj = Money(total_value, reference_currency)
         total_invested_obj = Money(total_invested, reference_currency)
@@ -127,6 +148,13 @@ class PortfolioCalculationService:
     ) -> Dict[str, Decimal]:
         """
         Calculate allocation percentages for each investment.
+
+        Weights are based on each holding's POSITION value — market price ×
+        quantity, face-value redemption for held-to-maturity bonds, or the
+        invested cost when no price is available — NOT the net gain. Net
+        values can be negative or dwarf the actual holding size, which would
+        produce meaningless weights (e.g. >100% or negative).
+
         All amounts are converted to reference_currency using the provided rates.
         Returns: {investment_id: percentage}
         """
@@ -153,29 +181,37 @@ class PortfolioCalculationService:
                 and bool(transactions)
             )
 
-            if not is_bond_htm and not price_history:
-                investment_values[investment.id] = Decimal("0")
-                continue
-
             try:
                 if is_bond_htm:
                     face_value = investment.face_value
                     assert face_value is not None  # implied by is_bond_htm
-                    inv_value = (
-                        InvestmentCalculationService.calculate_total_value_bond(
+                    position = (
+                        InvestmentCalculationService.calculate_position_value(
                             transactions,
                             face_value,
                             reference_currency,
                             rates,
                         )
                     )
-                else:
-                    current_price = price_history[0].price
-                    inv_value = InvestmentCalculationService.calculate_total_value(
-                        transactions, current_price, reference_currency, rates
+                elif price_history:
+                    position = (
+                        InvestmentCalculationService.calculate_position_value(
+                            transactions,
+                            price_history[0].price,
+                            reference_currency,
+                            rates,
+                        )
                     )
-                investment_values[investment.id] = inv_value.amount
-                total_value += inv_value.amount
+                else:
+                    # No live price: the invested cost is the best available
+                    # estimate of what the holding is worth.
+                    position = (
+                        InvestmentCalculationService.calculate_total_invested_amount(
+                            transactions, reference_currency, rates
+                        )
+                    )
+                investment_values[investment.id] = position.amount
+                total_value += position.amount
             except Exception:
                 investment_values[investment.id] = Decimal("0")
 
