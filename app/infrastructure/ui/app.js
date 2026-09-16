@@ -14,7 +14,12 @@ const state = {
 };
 
 function setStatus(message, isError = false) {
-  const banner = document.getElementById('status-message');
+  // While the landing page is visible, messages belong to the auth card.
+  const landing = document.getElementById('landing-view');
+  const onLanding = landing && !landing.classList.contains('hidden');
+  const banner = onLanding
+    ? document.getElementById('auth-message')
+    : document.getElementById('status-message');
   banner.textContent = message;
   banner.style.background = isError ? '#fee2e2' : '#e5f3f1';
   banner.style.borderColor = isError ? '#fecaca' : '#d8e1ea';
@@ -49,6 +54,16 @@ async function request(method, path, body = null) {
   }
   if (body) options.body = JSON.stringify(body);
   const res = await fetch(path, options);
+  // A rejected token means the session expired: return to the landing page.
+  // Deferred so any caller error handling settles before the view switches.
+  if (res.status === 401 && state.authToken && !path.startsWith('/auth/')) {
+    setTimeout(() => {
+      if (state.authToken) {
+        clearAuth();
+        setStatus('Your session has expired. Please sign in again.');
+      }
+    }, 0);
+  }
   return { status: res.status, data: await json(res) };
 }
 
@@ -100,26 +115,39 @@ function clearAuth() {
   setStatus('Signed out.');
 }
 
+function showLoginTab() {
+  document.getElementById('auth-form').classList.add('hidden');
+  document.getElementById('login-form').classList.remove('hidden');
+  document.getElementById('btn-show-login').classList.add('active');
+  document.getElementById('btn-show-create').classList.remove('active');
+}
+
+function showRegisterTab() {
+  document.getElementById('login-form').classList.add('hidden');
+  document.getElementById('auth-form').classList.remove('hidden');
+  document.getElementById('btn-show-create').classList.add('active');
+  document.getElementById('btn-show-login').classList.remove('active');
+}
+
 function renderAuthState() {
-  const authState = document.getElementById('auth-state');
+  const landingView = document.getElementById('landing-view');
+  const appView = document.getElementById('app-view');
   const userInfo = document.getElementById('user-info');
   const displayUsername = document.getElementById('display-username');
-  const authForm = document.getElementById('auth-form');
-  const loginForm = document.getElementById('login-form');
 
   if (state.authToken) {
-    authState.classList.add('hidden');
+    landingView.classList.add('hidden');
+    appView.classList.remove('hidden');
     userInfo.classList.remove('hidden');
-    authForm.classList.add('hidden');
-    loginForm.classList.add('hidden');
     displayUsername.textContent = state.authUsername;
     document.getElementById('portfolio-section').classList.remove('hidden');
     document.getElementById('quick-add-section').style.display = 'grid';
   } else {
-    authState.classList.add('hidden');
+    appView.classList.add('hidden');
+    landingView.classList.remove('hidden');
     userInfo.classList.add('hidden');
-    authForm.classList.remove('hidden');
-    loginForm.classList.add('hidden');
+    // The auth card defaults to the Sign in tab.
+    showLoginTab();
     document.getElementById('portfolio-section').classList.add('hidden');
     document.getElementById('quick-add-section').style.display = 'none';
   }
@@ -649,15 +677,19 @@ function selectInvestment(inv) {
 }
 
 function initializeEventListeners() {
-  // Auth toggles
-  document.getElementById('btn-show-login').addEventListener('click', () => {
-    document.getElementById('auth-form').classList.add('hidden');
-    document.getElementById('login-form').classList.remove('hidden');
-  });
-  document.getElementById('btn-show-create').addEventListener('click', () => {
-    document.getElementById('login-form').classList.add('hidden');
-    document.getElementById('auth-form').classList.remove('hidden');
-  });
+  // Auth tabs (landing card)
+  document.getElementById('btn-show-login').addEventListener('click', showLoginTab);
+  document.getElementById('btn-show-create').addEventListener('click', showRegisterTab);
+
+  // Landing CTAs open the auth card on the right tab
+  const openAuth = (tab) => {
+    tab();
+    document.getElementById('auth-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  document.getElementById('btn-landing-login').addEventListener('click', () => openAuth(showLoginTab));
+  document.getElementById('btn-landing-register').addEventListener('click', () => openAuth(showRegisterTab));
+  document.getElementById('btn-hero-register').addEventListener('click', () => openAuth(showRegisterTab));
+  document.getElementById('btn-hero-login').addEventListener('click', () => openAuth(showLoginTab));
 
   // Auth actions
   document.getElementById('btn-create-user').addEventListener('click', createUser);

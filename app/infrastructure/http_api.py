@@ -50,10 +50,26 @@ from app.infrastructure.external.yahoo_finance_price_service import (
 
 app = FastAPI(title="sinvest HTTP API", version="0.1.0")
 
+
+class NoCacheStaticFiles(StaticFiles):
+    """Static files that always revalidate.
+
+    The UI is plain files that evolve with the code; with default caching a
+    browser can keep an old app.js while picking up a new index.html (or vice
+    versa), which silently breaks the page (e.g. sign-in doing nothing).
+    no-cache keeps the ETag revalidation, so unchanged files are still cheap.
+    """
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 # Mount the simple static UI at /ui if available
 _ui_path = Path(__file__).resolve().parent / "ui"
 if _ui_path.exists():
-    app.mount("/ui", StaticFiles(directory=str(_ui_path), html=True), name="ui")
+    app.mount("/ui", NoCacheStaticFiles(directory=str(_ui_path), html=True), name="ui")
 
 
 @app.get("/")

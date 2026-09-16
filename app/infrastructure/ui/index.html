@@ -357,68 +357,203 @@
     @media (min-width: 480px) {
       .auth-form .split { grid-template-columns: repeat(2, 1fr); }
     }
+
+    /* ===== Landing (logged out) ===== */
+    .landing-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px; max-width: 1160px; margin: 0 auto; padding: 18px 24px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.25rem; letter-spacing: -0.01em; }
+    .brand-mark {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 34px; height: 34px; border-radius: 9px;
+      background: linear-gradient(135deg, var(--primary), #1d8a8f);
+      color: #fff; font-size: 1.1rem; font-weight: 800;
+      box-shadow: 0 6px 16px rgba(18, 106, 111, 0.35);
+    }
+    .nav-actions { display: flex; gap: 10px; }
+    .nav-actions button { width: auto; min-width: 120px; }
+    .primary-button {
+      background: linear-gradient(135deg, var(--primary), var(--primary-strong));
+      border-color: var(--primary-strong); color: #fff; font-weight: 700;
+    }
+    .primary-button:hover { filter: brightness(1.07); }
+    .ghost-button { background: transparent; border-color: var(--border-strong); color: var(--text); font-weight: 650; }
+    .hero { max-width: 920px; margin: 0 auto; padding: 54px 24px 26px; text-align: center; }
+    .hero-badge {
+      display: inline-block; padding: 6px 14px; border-radius: 999px;
+      background: var(--primary-soft); color: var(--primary-strong);
+      font-size: 0.78rem; font-weight: 750; letter-spacing: 0.05em; text-transform: uppercase;
+      border: 1px solid rgba(18, 106, 111, 0.25);
+    }
+    .hero h1 { margin: 18px 0 0; font-size: clamp(2.1rem, 5.4vw, 3.4rem); line-height: 1.06; letter-spacing: -0.02em; }
+    .hero-sub { margin: 18px auto 0; max-width: 660px; color: var(--muted); font-size: clamp(1rem, 1.6vw, 1.15rem); line-height: 1.6; }
+    .hero-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 26px; }
+    .hero-cta button { width: auto; min-width: 200px; min-height: 48px; }
+    .hero-strip { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 26px; }
+    .hero-strip span {
+      padding: 6px 14px; border-radius: 999px; background: rgba(255, 255, 255, 0.9);
+      border: 1px solid var(--border); color: var(--muted); font-size: 0.85rem; font-weight: 650;
+    }
+    .benefits {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 14px; max-width: 1160px; margin: 28px auto 0; padding: 0 24px;
+    }
+    .benefit-card {
+      background: rgba(255, 255, 255, 0.94); border: 1px solid var(--border);
+      border-radius: 10px; box-shadow: var(--shadow); padding: 20px; text-align: left;
+    }
+    .benefit-icon { font-size: 1.5rem; }
+    .benefit-card h3 { margin: 10px 0 6px; font-size: 1rem; }
+    .benefit-card p { margin: 0; color: var(--muted); font-size: 0.92rem; line-height: 1.55; }
+    .auth-section { max-width: 460px; margin: 42px auto 0; padding: 0 24px 26px; scroll-margin-top: 16px; }
+    .auth-card {
+      background: rgba(255, 255, 255, 0.96); border: 1px solid var(--border);
+      border-radius: 12px; box-shadow: var(--shadow); padding: 22px;
+    }
+    .auth-tabs {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+      background: var(--surface-muted); border: 1px solid var(--border);
+      border-radius: 9px; padding: 5px; margin-bottom: 16px;
+    }
+    .tab-btn { border: none; background: transparent; min-height: 38px; font-weight: 700; color: var(--muted); box-shadow: none; }
+    .tab-btn.active { background: #fff; color: var(--primary-strong); box-shadow: 0 2px 8px rgba(20, 33, 61, 0.10); }
+    .auth-card .auth-form { display: grid; gap: 12px; margin: 0; }
+    .auth-card .auth-form .button-row button { width: auto; }
+    #auth-message { border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: 0.88rem; min-height: 20px; }
+    #auth-message:empty { display: none; }
+    .landing-footer { text-align: center; color: var(--muted); font-size: 0.85rem; padding: 8px 24px 36px; }
+    .user-chip {
+      display: flex; align-items: center; gap: 12px;
+      background: rgba(255, 255, 255, 0.94); border: 1px solid var(--border);
+      border-radius: 8px; box-shadow: var(--shadow); padding: 9px 14px;
+    }
+    .user-chip .hint { margin: 0; }
   </style>
 </head>
 <body>
+  <!-- ============ LANDING VIEW (signed out) ============ -->
+  <div id="landing-view">
+    <nav class="landing-nav">
+      <div class="brand"><span class="brand-mark">s</span>sinvest</div>
+      <div class="nav-actions">
+        <button id="btn-landing-login" class="ghost-button">Sign in</button>
+        <button id="btn-landing-register" class="primary-button">Get started</button>
+      </div>
+    </nav>
+
+    <header class="hero">
+      <div class="hero-badge">Personal investment tracker</div>
+      <h1>Your entire portfolio,<br />one clear picture.</h1>
+      <p class="hero-sub">
+        sinvest brings your stocks, ETFs and bonds together in a single dashboard —
+        with live market prices, coupon income, held-to-maturity bond tracking and
+        true total return, in whatever currency you think in.
+      </p>
+      <div class="hero-cta">
+        <button id="btn-hero-register" class="primary-button">Create free account</button>
+        <button id="btn-hero-login" class="ghost-button">I already have an account</button>
+      </div>
+      <div class="hero-strip">
+        <span>Stocks</span><span>ETFs</span><span>Bonds</span><span>Crypto</span><span>Funds</span>
+      </div>
+    </header>
+
+    <section class="benefits">
+      <div class="benefit-card">
+        <div class="benefit-icon">📊</div>
+        <h3>All assets, one dashboard</h3>
+        <p>Stocks, ETFs, crypto and bonds side by side — with your allocation mix always in view.</p>
+      </div>
+      <div class="benefit-card">
+        <div class="benefit-icon">🎟️</div>
+        <h3>Bonds done right</h3>
+        <p>Record each coupon you receive and value held-to-maturity bonds at face value — no market price needed.</p>
+      </div>
+      <div class="benefit-card">
+        <div class="benefit-icon">💹</div>
+        <h3>True total return</h3>
+        <p>See what your holdings are worth, what you paid in, and your real gain including the income you received.</p>
+      </div>
+      <div class="benefit-card">
+        <div class="benefit-icon">🌍</div>
+        <h3>Multi-currency</h3>
+        <p>Hold assets in any currency and read your whole portfolio in your reference currency, with live FX rates.</p>
+      </div>
+      <div class="benefit-card">
+        <div class="benefit-icon">⚡</div>
+        <h3>Live market prices</h3>
+        <p>One-click price updates from Yahoo Finance, with smart hints for ambiguous European tickers.</p>
+      </div>
+      <div class="benefit-card">
+        <div class="benefit-icon">🔒</div>
+        <h3>Private by design</h3>
+        <p>Your own account, signed-in access only, and your data stays on your machine.</p>
+      </div>
+    </section>
+
+    <section class="auth-section" id="auth-section">
+      <div class="auth-card">
+        <div class="auth-tabs">
+          <button id="btn-show-login" class="tab-btn active">Sign in</button>
+          <button id="btn-show-create" class="tab-btn">Create account</button>
+        </div>
+
+        <div class="auth-form" id="login-form">
+          <div class="form-group">
+            <label for="login-username">Username</label>
+            <input id="login-username" placeholder="Your username" autocomplete="username" />
+          </div>
+          <div class="form-group">
+            <label for="login-password">Password</label>
+            <input id="login-password" type="password" placeholder="Your password" autocomplete="current-password" />
+          </div>
+          <button id="btn-login" class="primary-button">Sign In</button>
+          <pre id="out-login" class="hidden"></pre>
+        </div>
+
+        <div class="auth-form hidden" id="auth-form">
+          <div class="form-group">
+            <label for="user-username">Username</label>
+            <input id="user-username" placeholder="Create a username" autocomplete="username" />
+          </div>
+          <div class="form-group">
+            <label for="user-email">Email</label>
+            <input id="user-email" type="email" placeholder="you@example.com" autocomplete="email" />
+          </div>
+          <div class="form-group">
+            <label for="user-password">Password</label>
+            <input id="user-password" type="password" placeholder="Min 6 characters" autocomplete="new-password" />
+          </div>
+          <button id="btn-create-user" class="primary-button">Create Account</button>
+          <pre id="out-create-user" class="hidden"></pre>
+        </div>
+
+        <div id="auth-message"></div>
+      </div>
+    </section>
+
+    <footer class="landing-footer">sinvest — a personal portfolio manager. Your data stays yours.</footer>
+  </div>
+
+  <!-- ============ APP VIEW (signed in) ============ -->
+  <div id="app-view" class="hidden">
   <div class="page">
     <div class="topbar">
       <div>
-        <h1>sinvest Portfolio Dashboard</h1>
+        <h1>Portfolio Dashboard</h1>
         <p>Track investments, add transactions, and monitor portfolio performance in one place.</p>
       </div>
       <div class="topbar-right">
         <button id="btn-refresh" class="small-button">Refresh Data</button>
-
-        <!-- Auth widget (upper-right) -->
-        <div class="auth-widget">
-          <div class="auth-form" id="auth-form">
-            <div class="auth-widget-title">Create Account</div>
-            <div class="form-group">
-              <label for="user-username">Username</label>
-              <input id="user-username" placeholder="Create a username" autocomplete="username" />
-            </div>
-            <div class="form-group">
-              <label for="user-email">Email</label>
-              <input id="user-email" type="email" placeholder="you@example.com" autocomplete="email" />
-            </div>
-            <div class="form-group">
-              <label for="user-password">Password</label>
-              <input id="user-password" type="password" placeholder="Min 6 characters" autocomplete="new-password" />
-            </div>
-            <div class="button-row">
-              <button id="btn-create-user">Create Account</button>
-              <button id="btn-show-login" class="small-button">Sign In Instead</button>
-            </div>
-            <pre id="out-create-user"></pre>
-          </div>
-
-          <div class="auth-form hidden" id="login-form">
-            <div class="auth-widget-title">Sign In</div>
-            <div class="form-group">
-              <label for="login-username">Username</label>
-              <input id="login-username" placeholder="Your username" autocomplete="username" />
-            </div>
-            <div class="form-group">
-              <label for="login-password">Password</label>
-              <input id="login-password" type="password" placeholder="Your password" autocomplete="current-password" />
-            </div>
-            <div class="button-row">
-              <button id="btn-login">Sign In</button>
-              <button id="btn-show-create" class="small-button">Create Account</button>
-            </div>
-            <pre id="out-login"></pre>
-          </div>
-
-          <div id="auth-state" class="hint hidden">Signed in. Loading portfolios...</div>
-          <div id="user-info" class="hidden">
-            <div class="hint">Signed in as <strong id="display-username"></strong></div>
-            <button id="btn-logout" class="small-button" style="margin-top: 8px;">Sign Out</button>
-          </div>
+        <div id="user-info" class="user-chip hidden">
+          <span class="hint">Signed in as <strong id="display-username"></strong></span>
+          <button id="btn-logout" class="small-button">Sign Out</button>
         </div>
       </div>
     </div>
 
-    <div id="status-message" class="status-message">Welcome! Sign in or create an account to get started.</div>
+    <div id="status-message" class="status-message">Select a portfolio to see your overview.</div>
 
     <div class="dashboard">
       <!-- Left Panel: Streamlined Controls -->
@@ -650,6 +785,7 @@
       </div>
     </div>
   </div>
-  <script src="/ui/app.js"></script>
+  </div>
+  <script src="/ui/app.js?v=2"></script>
 </body>
 </html>
