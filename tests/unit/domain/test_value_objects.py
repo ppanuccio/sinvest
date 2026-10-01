@@ -43,6 +43,41 @@ class TestIdentifier:
         with pytest.raises(InvalidIdentifierException):
             Identifier.create_isin("INVALID1234567")
 
+    @pytest.mark.parametrize(
+        "isin",
+        [
+            "US0378331005",  # Apple
+            "DE0005190003",  # BMW
+            "IT0005518128",  # BTP 2033
+            "IT0004927593",
+            "XS2702860896",
+            "IE00B4L5Y983",
+            "FR0013341682",
+            "EU000A3K4EN5",
+        ],
+    )
+    def test_isin_valid_check_digit(self, isin):
+        """Test ISINs with correct Luhn check digits are accepted."""
+        identifier = Identifier.create_isin(isin)
+        assert identifier.value == isin
+
+    @pytest.mark.parametrize("isin", ["IT0005322855", "US0378331006"])
+    def test_isin_invalid_check_digit(self, isin):
+        """Test ISINs with a wrong Luhn check digit are rejected."""
+        with pytest.raises(InvalidIdentifierException) as excinfo:
+            Identifier.create_isin(isin)
+        assert "check digit" in str(excinfo.value)
+
+    def test_isin_lowercase_normalized(self):
+        """Test lowercase ISIN input is accepted and stored uppercased."""
+        identifier = Identifier("us0378331005", "ISIN")
+        assert identifier.value == "US0378331005"
+
+    def test_ticker_lowercase_normalized(self):
+        """Test lowercase ticker input is stored uppercased."""
+        identifier = Identifier("aapl", "TICKER")
+        assert identifier.value == "AAPL"
+
     def test_ticker_too_long(self):
         """Test ticker validation rejects overly long identifiers."""
         with pytest.raises(InvalidIdentifierException):

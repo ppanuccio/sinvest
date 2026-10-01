@@ -174,6 +174,7 @@ class YahooFinancePriceService:
                     return {
                         "exact": True,
                         "suggestions": [],
+                        "name": info.get("shortName") or info.get("longName"),
                         "message": f"{symbol} is valid and has price data.",
                     }
             except Exception:
@@ -226,6 +227,7 @@ class YahooFinancePriceService:
                     return {
                         "exact": True,
                         "suggestions": [],
+                        "name": info.get("shortName") or info.get("longName"),
                         "message": f"{symbol} is valid and has price data.",
                     }
             except Exception:

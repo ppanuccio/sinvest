@@ -2,10 +2,15 @@
 
 import uuid
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from app.domain.entities.portfolio import Portfolio
 from app.domain.repositories.portfolio_repository import PortfolioRepository
+from app.domain.repositories.investment_repository import InvestmentRepository
+from app.domain.repositories.transaction_repository import TransactionRepository
+from app.domain.repositories.price_history_repository import (
+    PriceHistoryRepository,
+)
 from app.domain.services.validation_service import ValidationService
 from app.domain.exceptions import EntityNotFoundException, UnauthorizedException
 from app.application.dto.portfolio_dto import (
@@ -19,8 +24,17 @@ from app.application.dto.portfolio_dto import (
 class PortfolioUseCases:
     """Orchestrates all portfolio-related operations."""
 
-    def __init__(self, portfolio_repository: PortfolioRepository):
+    def __init__(
+        self,
+        portfolio_repository: PortfolioRepository,
+        investment_repository: Optional[InvestmentRepository] = None,
+        transaction_repository: Optional[TransactionRepository] = None,
+        price_history_repository: Optional[PriceHistoryRepository] = None,
+    ):
         self.portfolio_repository = portfolio_repository
+        self.investment_repository = investment_repository
+        self.transaction_repository = transaction_repository
+        self.price_history_repository = price_history_repository
         self.validation_service = ValidationService()
 
     def create_portfolio(
@@ -99,7 +113,7 @@ class PortfolioUseCases:
         return self._to_response_dto(updated)
 
     def delete_portfolio(self, portfolio_id: str, user_id: str) -> None:
-        """Delete a portfolio."""
+        """Delete a portfolio and all its investments (with their data)."""
         # Get and verify ownership
         portfolio = self.portfolio_repository.get_by_id(portfolio_id)
         if not portfolio:
@@ -109,6 +123,22 @@ class PortfolioUseCases:
             raise UnauthorizedException(
                 f"User {user_id} does not own portfolio {portfolio_id}"
             )
+
+        # Cascade: each investment takes its transactions and price
+        # history with it (mirrors delete_investment).
+        if self.investment_repository is not None:
+            for investment in self.investment_repository.list_by_portfolio(
+                portfolio_id
+            ):
+                if self.transaction_repository:
+                    self.transaction_repository.delete_by_investment(
+                        investment.id
+                    )
+                if self.price_history_repository:
+                    self.price_history_repository.delete_by_investment(
+                        investment.id
+                    )
+                self.investment_repository.delete(investment.id)
 
         # Delete
         self.portfolio_repository.delete(portfolio_id)

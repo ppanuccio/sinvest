@@ -347,6 +347,7 @@ class FileBasedInvestmentRepository(InvestmentRepository):
                 if investment.face_value is not None
                 else None
             ),
+            "name": investment.name,
         }
         investments[investment.id] = investment_data
         self._save(investments)
@@ -371,6 +372,7 @@ class FileBasedInvestmentRepository(InvestmentRepository):
             updated_at=_decode_value(i.get("updated_at")),
             held_to_maturity=i.get("held_to_maturity", False),
             face_value=face_value or None,
+            name=i.get("name"),
         )
 
     def list_by_portfolio(self, portfolio_id: str) -> List[Investment]:
@@ -393,6 +395,7 @@ class FileBasedInvestmentRepository(InvestmentRepository):
                         updated_at=_decode_value(i.get("updated_at")),
                         held_to_maturity=i.get("held_to_maturity", False),
                         face_value=face_value or None,
+                        name=i.get("name"),
                     )
                 )
         return result

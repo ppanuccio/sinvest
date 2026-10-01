@@ -19,6 +19,7 @@ class CreateInvestmentDTO:
     held_to_maturity: bool = False
     face_value: Optional[Decimal] = None
     face_value_currency: str = "USD"
+    name: Optional[str] = None
 
 
 @dataclass
@@ -29,6 +30,7 @@ class UpdateInvestmentDTO:
     held_to_maturity: Optional[bool] = None
     face_value: Optional[Decimal] = None
     face_value_currency: Optional[str] = None
+    name: Optional[str] = None
 
 
 @dataclass
@@ -63,6 +65,7 @@ class InvestmentResponseDTO:
     held_to_maturity: bool = False
     face_value: Optional[Decimal] = None
     face_value_currency: str = "USD"
+    name: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -88,6 +91,7 @@ class InvestmentDetailResponseDTO:
     price_count: int
     created_at: datetime
     updated_at: Optional[datetime]
+    name: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -59,6 +59,9 @@ class Identifier:
             raise InvalidIdentifierException("", "Identifier cannot be empty")
 
         value_upper = self.value.upper()
+        # Normalize the stored value too, so lookups never depend on the case
+        # the caller happened to use (factories, repos and imports share this).
+        object.__setattr__(self, "value", value_upper)
 
         if self.identifier_type.upper() == "ISIN":
             self._validate_isin(value_upper)
@@ -83,6 +86,27 @@ class Identifier:
                 identifier,
                 "ISIN must match format: 2 letters + 9 alphanumeric + 1 digit",
             )
+        if not Identifier._isin_check_digit_valid(identifier):
+            raise InvalidIdentifierException(
+                identifier,
+                "ISIN check digit is invalid (Luhn checksum failed)",
+            )
+
+    @staticmethod
+    def _isin_check_digit_valid(identifier: str) -> bool:
+        """ISO 6166 check digit: letters expand to 10-35, then a Luhn sum."""
+        digits = "".join(
+            str(ord(ch) - 55) if ch.isalpha() else ch for ch in identifier
+        )
+        total = 0
+        for index, ch in enumerate(reversed(digits)):
+            d = int(ch)
+            if index % 2 == 1:
+                d *= 2
+                if d > 9:
+                    d -= 9
+            total += d
+        return total % 10 == 0
 
     @staticmethod
     def _validate_ticker(identifier: str) -> None:

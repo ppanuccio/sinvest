@@ -147,7 +147,7 @@ class TestInvestmentUseCases:
 
         dto = CreateInvestmentDTO(
             portfolio_id=portfolio_id,
-            identifier="IT0000000001",
+            identifier="IT0000000007",
             identifier_type="ISIN",
             type="bond",
             held_to_maturity=True,
@@ -168,7 +168,7 @@ class TestInvestmentUseCases:
 
         dto = CreateInvestmentDTO(
             portfolio_id=portfolio_id,
-            identifier="IT0000000002",
+            identifier="IT0000000015",
             identifier_type="ISIN",
             type="bond",
             held_to_maturity=True,
@@ -184,7 +184,7 @@ class TestInvestmentUseCases:
 
         create_dto = CreateInvestmentDTO(
             portfolio_id=portfolio_id,
-            identifier="IT0000000003",
+            identifier="IT0000000023",
             identifier_type="ISIN",
             type="bond",
         )

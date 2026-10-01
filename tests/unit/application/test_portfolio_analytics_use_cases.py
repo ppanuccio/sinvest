@@ -190,7 +190,7 @@ class TestPortfolioAnalyticsUseCases:
         # Create held-to-maturity bond (face value 100 USD/unit)
         inv_dto = CreateInvestmentDTO(
             portfolio_id=portfolio.id,
-            identifier="US1234567890",
+            identifier="US1234567899",
             identifier_type="ISIN",
             type="bond",
             held_to_maturity=True,
@@ -263,7 +263,7 @@ class TestPortfolioAnalyticsUseCases:
         # Tradable bond: no held_to_maturity / face value
         inv_dto = CreateInvestmentDTO(
             portfolio_id=portfolio.id,
-            identifier="US1234567891",
+            identifier="US1234567881",
             identifier_type="ISIN",
             type="bond",
         )

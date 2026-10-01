@@ -1,6 +1,12 @@
 const json = (res) => res.json().catch(() => ({}));
 const AUTH_STORAGE_KEY = 'sinvest.auth';
 
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
 const state = {
   userId: '',
   portfolioId: '',
@@ -106,6 +112,8 @@ function clearAuth() {
   state.portfolio = null;
   state.investments = [];
   localStorage.removeItem(AUTH_STORAGE_KEY);
+  document.getElementById('import-form').classList.add('hidden');
+  document.getElementById('import-no-selection').classList.remove('hidden');
   renderAuthState();
   renderPortfolioMeta();
   renderOverview();
@@ -379,6 +387,59 @@ async function createTransaction() {
   }
 }
 
+async function importExcel() {
+  const userId = state.userId;
+  const portfolioId = state.portfolioId;
+  const fileInput = document.getElementById('import-file');
+  const file = fileInput.files && fileInput.files[0];
+  const broker = document.getElementById('import-broker').value.trim();
+  if (!userId || !portfolioId) {
+    setStatus('Select a portfolio before importing.', true);
+    return;
+  }
+  if (!file) {
+    setStatus('Choose an .xlsx statement file to import.', true);
+    return;
+  }
+  if (!broker) {
+    setStatus('Enter the broker to record on imported transactions.', true);
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('broker', broker);
+
+  setStatus('Importing statement...');
+  const out = document.getElementById('out-import-excel');
+  try {
+    const res = await fetch(`/users/${userId}/portfolios/${portfolioId}/import-excel`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${state.authToken}` },
+      body: formData,
+    });
+    const data = await json(res);
+    out.textContent = JSON.stringify(data, null, 2);
+    if (res.status === 201 || res.status === 200) {
+      const created = data.created_investments.length;
+      const parts = [
+        `${data.created_transactions} transactions`,
+        `${created} new investments`,
+      ];
+      if (data.skipped_transactions > 0) parts.push(`${data.skipped_transactions} skipped (already imported)`);
+      if (data.skipped_unsupported > 0) parts.push(`${data.skipped_unsupported} unsupported (sells)`);
+      if (data.invalid_identifiers && data.invalid_identifiers.length > 0) parts.push(`${data.invalid_identifiers.length} invalid ISIN skipped`);
+      setStatus(`Import complete: ${parts.join(', ')}.`);
+      fileInput.value = '';
+      await refreshDashboard();
+    } else {
+      setStatus(data.detail || 'Failed to import statement.', true);
+    }
+  } catch (err) {
+    setStatus(`Import failed: ${err.message}`, true);
+  }
+}
+
 async function loadAnalytics(userId, portfolioId) {
   const refCurrency = state.referenceCurrency || 'USD';
   const res = await request('GET', `/users/${userId}/portfolios/${portfolioId}/analytics?reference_currency=${refCurrency}`);
@@ -414,6 +475,7 @@ async function loadInvestments(userId, portfolioId) {
         ...inv,
         identifier: inv.identifier || raw.identifier,
         type: inv.type || raw.type,
+        name: inv.name || raw.name,
       };
     });
   } else {
@@ -421,6 +483,7 @@ async function loadInvestments(userId, portfolioId) {
       investment_id: inv.id,
       identifier: inv.identifier,
       type: inv.type,
+      name: inv.name,
       total_quantity: '—',
       current_price: '—',
       total_invested: '—',
@@ -496,6 +559,62 @@ async function fetchAllPrices() {
     await refreshDashboard();
   } else {
     setStatus(res.data.detail || 'Failed to fetch prices.', true);
+  }
+}
+
+async function enrichNames() {
+  const userId = state.userId;
+  const portfolioId = state.portfolioId;
+  if (!userId || !portfolioId) {
+    setStatus('Select a portfolio first.', true);
+    return;
+  }
+  setStatus('Fetching security names (ISINs via OpenFIGI, tickers via Yahoo)...');
+  const res = await request('POST', `/users/${userId}/portfolios/${portfolioId}/enrich-names`);
+  if (res.status === 200) {
+    const enriched = res.data.enriched || [];
+    const unresolved = res.data.unresolved || [];
+    const parts = [`${enriched.length} name(s) filled in`];
+    if (res.data.already_named > 0) parts.push(`${res.data.already_named} already named`);
+    if (unresolved.length > 0) parts.push(`${unresolved.length} unresolved (${unresolved.join(', ')})`);
+    setStatus(`✅ Names updated: ${parts.join(', ')}.`);
+    await refreshDashboard();
+  } else {
+    setStatus(res.data.detail || 'Failed to fetch names.', true);
+  }
+}
+
+async function deletePortfolio() {
+  const userId = state.userId;
+  const portfolioId = state.portfolioId;
+  if (!userId || !portfolioId) {
+    setStatus('Select a portfolio first.', true);
+    return;
+  }
+  const name = state.portfolio ? (state.portfolio.name || portfolioId) : portfolioId;
+  const holdings = Array.isArray(state.investments) ? state.investments.length : 0;
+  const ok = window.confirm(
+    `Are you sure you want to delete the portfolio "${name}"?\n\n` +
+    `This permanently removes the portfolio together with its ${holdings} holding(s), ` +
+    `their transactions and price history. This action cannot be undone.`
+  );
+  if (!ok) return;
+
+  const res = await request('DELETE', `/users/${userId}/portfolios/${portfolioId}`);
+  if (res.status === 204) {
+    setStatus(`✅ Portfolio "${name}" deleted.`);
+    state.portfolioId = '';
+    state.investmentId = '';
+    state.portfolio = null;
+    state.analytics = null;
+    state.investments = [];
+    renderPortfolioMeta();
+    renderOverview();
+    renderComposition();
+    renderInvestments();
+    await refreshPortfolios();
+  } else {
+    setStatus(res.data.detail || 'Failed to delete portfolio.', true);
   }
 }
   async function loadTransactions(userId, investmentId) {
@@ -596,10 +715,9 @@ function renderInvestments() {
   state.investments.forEach((inv) => {
     const row = document.createElement('tr');
     const gainClass = Number(inv.yield_amount) >= 0 ? 'positive' : 'negative';
-    const shortId = inv.investment_id ? inv.investment_id.slice(0, 8) : 'pending';
     const hasPrice = inv.current_price !== null && inv.current_price !== undefined && inv.current_price !== '—' && !Number.isNaN(Number(inv.current_price));
     row.innerHTML = `
-      <td><strong>${inv.identifier || 'Unknown asset'}</strong><div class="hint">${shortId}</div></td>
+      <td><strong>${escapeHtml(inv.name || inv.identifier || 'Unknown asset')}</strong><div class="hint">${escapeHtml(inv.identifier || '')}</div></td>
       <td><span class="tag">${inv.type || 'other'}</span></td>
       <td>${inv.total_quantity}</td>
       <td>${formatMoney(inv.current_price)}</td>
@@ -669,11 +787,11 @@ function selectInvestment(inv) {
 
   // Update badge
   const badge = document.getElementById('tx-investment-badge');
-  badge.textContent = inv.identifier;
+  badge.textContent = inv.name || inv.identifier;
   badge.classList.remove('hidden');
 
   loadTransactions(state.userId, inv.investment_id);
-  setStatus(`Selected ${inv.identifier}. Fill in transaction details and click "Add Transaction".`);
+  setStatus(`Selected ${inv.name || inv.identifier}. Fill in transaction details and click "Add Transaction".`);
 }
 
 function initializeEventListeners() {
@@ -709,6 +827,8 @@ function initializeEventListeners() {
     }
     updateStepIndicator(3);
     setStatus('Loading portfolio...');
+    document.getElementById('import-no-selection').classList.add('hidden');
+    document.getElementById('import-form').classList.remove('hidden');
     await loadPortfolioDetails(state.userId, state.portfolioId);
     await loadAnalytics(state.userId, state.portfolioId);
     await loadInvestments(state.userId, state.portfolioId);
@@ -717,6 +837,7 @@ function initializeEventListeners() {
   // Quick actions
   document.getElementById('btn-create-investment').addEventListener('click', createInvestment);
   document.getElementById('btn-create-transaction').addEventListener('click', createTransaction);
+  document.getElementById('btn-import-excel').addEventListener('click', importExcel);
 
   // Show/hide bond fields when Asset Class changes
   const invTypeSelect = document.getElementById('inv-type');
@@ -772,6 +893,8 @@ function initializeEventListeners() {
   toggleTxKind();
   document.getElementById('btn-refresh').addEventListener('click', refreshDashboard);
   document.getElementById('btn-fetch-all-prices').addEventListener('click', fetchAllPrices);
+  document.getElementById('btn-fetch-names').addEventListener('click', enrichNames);
+  document.getElementById('btn-delete-portfolio').addEventListener('click', deletePortfolio);
 
   // Reference currency selector
   document.getElementById('ref-currency').addEventListener('change', async (event) => {
@@ -811,7 +934,7 @@ function initializeEventListeners() {
       if (data.exact) {
         // Ticker is valid and unambiguous
         tickerWarning.className = 'ticker-warning valid';
-        tickerWarning.innerHTML = `✅ "${value}" is valid.`;
+        tickerWarning.innerHTML = `✅ "${value}" is valid.${data.name ? ` — <strong>${escapeHtml(data.name)}</strong>` : ''}`;
         tickerWarning.classList.remove('hidden');
         addInvBtn.disabled = false;
         if (tickerHint) tickerHint.classList.add('hidden');

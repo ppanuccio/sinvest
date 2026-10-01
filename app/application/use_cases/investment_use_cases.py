@@ -98,6 +98,7 @@ class InvestmentUseCases:
             created_at=datetime.utcnow(),
             held_to_maturity=dto.held_to_maturity,
             face_value=face_value,
+            name=dto.name,
         )
 
         # Save and return
@@ -184,7 +185,7 @@ class InvestmentUseCases:
 
         if any(
             value is not None
-            for value in (dto.type, dto.held_to_maturity, dto.face_value)
+            for value in (dto.type, dto.held_to_maturity, dto.face_value, dto.name)
         ):
             investment_type = None
             if dto.type:
@@ -195,6 +196,7 @@ class InvestmentUseCases:
                 type=investment_type,
                 held_to_maturity=dto.held_to_maturity,
                 face_value=face_value,
+                name=dto.name,
                 updated_at=datetime.utcnow(),
             )
             updated = self.investment_repository.update(investment)
@@ -247,4 +249,5 @@ class InvestmentUseCases:
                 if investment.face_value is not None
                 else "USD"
             ),
+            name=investment.name,
         )

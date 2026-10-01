@@ -290,6 +290,7 @@ class PortfolioAnalyticsUseCases:
                 yield_percentage=inv_yield_pct,
                 allocation_percentage=allocation.get(investment.id, 0),
                 coupon_income=coupon_income.amount if coupon_income else None,
+                name=investment.name,
             )
             investment_analytics_list.append(inv_analytics)
 

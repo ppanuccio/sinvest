@@ -1,16 +1,18 @@
+import asyncio
 from dataclasses import asdict
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import List
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, Form, HTTPException, UploadFile, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr, Field
 
 from app.application.dto.auth_dto import LoginDTO
+from app.application.dto.import_dto import ImportResultDTO
 from app.application.dto.investment_dto import CreateInvestmentDTO
 from app.application.dto.portfolio_dto import CreatePortfolioDTO
 from app.application.dto.transaction_dto import CreateTransactionDTO
@@ -28,6 +30,12 @@ from app.application.use_cases.fetch_price_use_cases import (
     FetchPriceUseCases,
     YahooFinanceError,
 )
+from app.application.use_cases.statement_import_use_cases import (
+    StatementImportUseCases,
+)
+from app.application.use_cases.investment_enrichment_use_cases import (
+    InvestmentEnrichmentUseCases,
+)
 from app.domain.exceptions import (
     AuthenticationFailedException,
     DuplicateUserException,
@@ -44,8 +52,15 @@ from app.infrastructure.file_based_repositories import (
     FileBasedUserRepository,
 )
 from app.infrastructure.security import HMACTokenService, PBKDF2PasswordHasher
+from app.infrastructure.excel_statement_parser import (
+    StatementParseError,
+    parse_statement_workbook,
+)
 from app.infrastructure.external.yahoo_finance_price_service import (
     YahooFinancePriceService,
+)
+from app.infrastructure.external.openfigi_identifier_validator import (
+    OpenFigiIdentifierValidator,
 )
 
 app = FastAPI(title="sinvest HTTP API", version="0.1.0")
@@ -94,7 +109,12 @@ authentication_use_cases = AuthenticationUseCases(
     password_hasher,
     token_service,
 )
-portfolio_use_cases = PortfolioUseCases(portfolio_repository)
+portfolio_use_cases = PortfolioUseCases(
+    portfolio_repository,
+    investment_repository,
+    transaction_repository,
+    price_history_repository,
+)
 investment_use_cases = InvestmentUseCases(
     investment_repository,
     portfolio_repository,
@@ -124,6 +144,23 @@ fetch_price_use_cases = FetchPriceUseCases(
     portfolio_repository,
 )
 
+identifier_validator = OpenFigiIdentifierValidator()
+
+investment_enrichment_use_cases = InvestmentEnrichmentUseCases(
+    investment_repository,
+    portfolio_repository,
+    identifier_validator,
+)
+
+statement_import_use_cases = StatementImportUseCases(
+    investment_use_cases,
+    transaction_use_cases,
+    portfolio_repository,
+    investment_repository,
+    transaction_repository,
+    identifier_validator=identifier_validator,
+)
+
 
 class CreateUserRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
@@ -151,6 +188,7 @@ class CreateInvestmentRequest(BaseModel):
     held_to_maturity: bool = False
     face_value: Decimal | None = None
     face_value_currency: str = Field(default="USD", pattern="^[A-Z]{3}$")
+    name: str | None = Field(default=None, max_length=200)
 
 
 class CreateTransactionRequest(BaseModel):
@@ -218,6 +256,7 @@ class InvestmentResponseModel(BaseModel):
     held_to_maturity: bool = False
     face_value: Decimal | None = None
     face_value_currency: str = "USD"
+    name: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -235,6 +274,54 @@ class TransactionResponseModel(BaseModel):
     kind: str = "buy"
 
     model_config = {"from_attributes": True}
+
+
+class InvalidIdentifierResponseModel(BaseModel):
+    """A statement row skipped because its identifier failed validation."""
+
+    identifier: str
+    title: str
+    reason: str
+
+
+class NameEnrichmentResponseModel(BaseModel):
+    """Outcome of a name-enrichment pass over a portfolio."""
+
+    enriched: List[InvestmentResponseModel]
+    already_named: int
+    unresolved: List[str]
+
+
+class ImportResultResponseModel(BaseModel):
+    """Outcome of an Excel statement import into a portfolio."""
+
+    created_investments: List[InvestmentResponseModel]
+    created_transactions: int
+    skipped_transactions: int
+    skipped_unsupported: int
+    invalid_identifiers: List[InvalidIdentifierResponseModel] = []
+
+    @classmethod
+    def from_result(
+        cls, result: ImportResultDTO, skipped_unsupported: int
+    ) -> "ImportResultResponseModel":
+        return cls(
+            created_investments=[
+                InvestmentResponseModel.model_validate(inv)
+                for inv in result.created_investments
+            ],
+            created_transactions=result.created_transactions,
+            skipped_transactions=result.skipped_transactions,
+            skipped_unsupported=skipped_unsupported,
+            invalid_identifiers=[
+                InvalidIdentifierResponseModel(
+                    identifier=invalid.identifier,
+                    title=invalid.title,
+                    reason=invalid.reason,
+                )
+                for invalid in result.invalid_identifiers
+            ],
+        )
 
 
 @app.exception_handler(DomainException)
@@ -316,6 +403,33 @@ async def check_ticker(symbol: str):
         return result
     except Exception as e:
         return {"exact": False, "suggestions": [], "message": str(e)}
+
+
+@app.get("/identifier/check")
+async def check_identifier(identifier: str, type: str = "ISIN"):
+    """
+    Validate an identifier against external reference data (OpenFIGI) and
+    enrich it with the security name and type.
+
+    Returns a JSON object with:
+      - is_valid: False only when the reference data reports the identifier invalid
+      - name: security name when known
+      - security_type: normalized type ("stock" | "bond" | "etf") when known
+      - message: warning/unavailability detail
+
+    This is a public endpoint (no auth required), mirroring /ticker/check, used
+    by the UI to validate ISINs before the user adds an investment.
+    """
+    try:
+        result = identifier_validator.validate(identifier.strip(), type)
+        return {
+            "is_valid": result.is_valid,
+            "name": result.name,
+            "security_type": result.security_type,
+            "message": result.message,
+        }
+    except Exception as e:
+        return {"is_valid": True, "name": None, "security_type": None, "message": str(e)}
 
 
 def _encode_value(v):
@@ -436,6 +550,7 @@ async def create_investment(
         held_to_maturity=request.held_to_maturity,
         face_value=request.face_value,
         face_value_currency=request.face_value_currency,
+        name=request.name,
     )
     investment = investment_use_cases.create_investment(user_id, dto)
     return InvestmentResponseModel.model_validate(investment)
@@ -452,6 +567,19 @@ async def delete_investment(
 ) -> None:
     """Delete an investment."""
     investment_use_cases.delete_investment(investment_id, user_id)
+
+
+@app.delete(
+    "/users/{user_id}/portfolios/{portfolio_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_portfolio(
+    user_id: str,
+    portfolio_id: str,
+    authenticated_user_id: str = Depends(require_route_user),
+) -> None:
+    """Delete a portfolio and all its investments (cascade)."""
+    portfolio_use_cases.delete_portfolio(portfolio_id, user_id)
 
 
 @app.get(
@@ -502,6 +630,73 @@ async def list_transactions(
 ) -> List[TransactionResponseModel]:
     transactions = transaction_use_cases.list_transactions(investment_id, user_id)
     return [TransactionResponseModel.model_validate(transaction) for transaction in transactions]
+
+
+@app.post(
+    "/users/{user_id}/portfolios/{portfolio_id}/import-excel",
+    response_model=ImportResultResponseModel,
+    status_code=status.HTTP_201_CREATED,
+)
+async def import_excel(
+    user_id: str,
+    portfolio_id: str,
+    file: UploadFile,
+    broker: str = Form("FINECO"),
+    authenticated_user_id: str = Depends(require_route_user),
+) -> ImportResultResponseModel:
+    """Import investments and transactions from a bank statement (Excel).
+
+    Accepts the security-movement export layout (Operazione / Titolo / Isin /
+    Quantita / Divisa / Controvalore columns). Missing investments are created
+    on the fly; rows that exactly match already-stored transactions are
+    skipped, so re-importing the same file is harmless.
+    """
+    content = await file.read()
+    try:
+        rows, skipped_unsupported = parse_statement_workbook(content)
+    except StatementParseError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+    result = await asyncio.to_thread(
+        statement_import_use_cases.import_transactions,
+        user_id,
+        portfolio_id,
+        rows,
+        broker,
+    )
+    return ImportResultResponseModel.from_result(result, skipped_unsupported)
+
+
+@app.post(
+    "/users/{user_id}/portfolios/{portfolio_id}/enrich-names",
+    response_model=NameEnrichmentResponseModel,
+)
+async def enrich_names(
+    user_id: str,
+    portfolio_id: str,
+    authenticated_user_id: str = Depends(require_route_user),
+) -> NameEnrichmentResponseModel:
+    """Fill in missing security names (ISINs via OpenFIGI, tickers via Yahoo).
+
+    Investments that already have a name are left untouched, so re-running
+    is harmless.
+    """
+    result = await investment_enrichment_use_cases.enrich_portfolio_names(
+        user_id, portfolio_id
+    )
+    return NameEnrichmentResponseModel(
+        enriched=[
+            InvestmentResponseModel.model_validate(
+                investment_use_cases._to_response_dto(inv)
+            )
+            for inv in result.enriched
+        ],
+        already_named=result.already_named,
+        unresolved=result.unresolved,
+    )
 
 
 @app.post(

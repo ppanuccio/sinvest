@@ -585,6 +585,7 @@
           <div class="button-row" style="margin-top: 8px;">
             <button id="btn-show-create-portfolio" class="small-button">+ Create New Portfolio</button>
             <button id="btn-hide-create-portfolio" class="small-button hidden">Cancel</button>
+            <button id="btn-delete-portfolio" class="small-button" style="margin-left: auto; color: #991b1b; border-color: #fecaca;">Delete Portfolio</button>
           </div>
         </div>
 
@@ -705,6 +706,31 @@
             </div>
             <pre id="out-create-transaction"></pre>
           </div>
+
+          <!-- Import from Excel -->
+          <div class="action-card" style="margin: 0; padding: 12px; background: var(--surface);">
+            <h3 style="margin: 0 0 10px; font-size: 0.85rem;">Import from Excel</h3>
+            <div class="inline-form">
+              <div id="import-no-selection" class="hint" style="text-align: center; padding: 12px; background: var(--surface-muted); border-radius: 6px;">
+                Select a portfolio first, then upload a bank statement export (.xlsx).
+              </div>
+              <div id="import-form" class="hidden">
+                <div class="form-group">
+                  <label for="import-file">Statement file (.xlsx)</label>
+                  <input id="import-file" type="file" accept=".xlsx" />
+                </div>
+                <div class="form-group">
+                  <label for="import-broker">Broker to record on transactions</label>
+                  <input id="import-broker" placeholder="e.g., FINECO" value="FINECO" />
+                </div>
+                <button id="btn-import-excel" style="width: 100%;">Import Transactions</button>
+                <div class="hint" style="font-size: 0.78rem; text-align: center; margin-top: 6px;">
+                  Reads Operazione / Titolo / Isin / Quantita / Divisa / Controvalore columns. Buys include fees; coupons become coupon income. Already-imported rows are skipped.
+                </div>
+              </div>
+            </div>
+            <pre id="out-import-excel"></pre>
+          </div>
         </div>
       </div>
 
@@ -756,6 +782,7 @@
           <h2>Holdings</h2>
           <div style="display: flex; gap: 8px; align-items: center;">
             <div id="holdings-count" class="hint" style="font-weight: 500;"></div>
+            <button id="btn-fetch-names" class="small-button" style="width: auto; min-height: 32px; font-size: 0.78rem;">Fetch Names</button>
             <button id="btn-fetch-all-prices" class="small-button" style="width: auto; min-height: 32px; font-size: 0.78rem;">Fetch All Prices</button>
           </div>
         </div>

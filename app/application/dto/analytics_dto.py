@@ -21,6 +21,7 @@ class InvestmentAnalyticsDTO:
     yield_amount: Decimal
     yield_percentage: Optional[Decimal]
     allocation_percentage: Decimal
+    name: Optional[str] = None
     coupon_income: Optional[Decimal] = None
 
 
